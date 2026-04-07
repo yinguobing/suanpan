@@ -1,10 +1,12 @@
 use clap::{Parser, Subcommand};
 
 pub mod add;
+pub mod delete;
 pub mod list;
 pub mod stats;
 
 use add::AddArgs;
+use delete::DeleteArgs;
 use list::ListArgs;
 use stats::StatsArgs;
 
@@ -22,6 +24,8 @@ pub struct Cli {
 pub enum Commands {
     /// 添加交易记录
     Add(AddArgs),
+    /// 删除交易记录
+    Delete(DeleteArgs),
     /// 列出交易记录
     List(ListArgs),
     /// 统计报表

@@ -193,13 +193,66 @@ impl Database {
         })
     }
 
-    /// 删除交易记录
+    /// 删除交易记录（通过完整 RecordId）
     pub async fn delete_transaction(&self, id: RecordId) -> Result<()> {
         self.db
             .delete::<Option<Transaction>>(id)
             .await
             .map_err(FinanceError::Database)?;
         Ok(())
+    }
+
+    /// 根据短 ID 查找交易记录（匹配前 12 位）
+    async fn find_by_short_id(&self, short_id: &str) -> Result<Option<(RecordId, Transaction)>> {
+        // 短 ID 应该是 12 位字母数字
+        if short_id.len() != 12 {
+            return Err(FinanceError::Validation(
+                "短 ID 应为 12 位字符".to_string(),
+            ));
+        }
+
+        // 将 RecordId 转为字符串后比较前 12 位
+        let sql = "SELECT * FROM transaction WHERE string::starts_with(<string> id, $prefix)";
+        let mut result = self
+            .db
+            .query(sql)
+            .bind(("prefix", format!("transaction:{}", short_id)))
+            .await
+            .map_err(FinanceError::Database)?;
+
+        let transactions: Vec<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+
+        if transactions.is_empty() {
+            Ok(None)
+        } else {
+            // 返回第一个匹配的记录
+            let tx = transactions.into_iter().next().unwrap();
+            let id = tx.id.clone().ok_or_else(|| {
+                FinanceError::Unknown("交易记录缺少 ID".to_string())
+            })?;
+            Ok(Some((id, tx)))
+        }
+    }
+
+    /// 根据短 ID 删除交易记录
+    pub async fn delete_by_short_id(&self, short_id: &str) -> Result<bool> {
+        match self.find_by_short_id(short_id).await? {
+            Some((id, _)) => {
+                self.delete_transaction(id).await?;
+                Ok(true)
+            }
+            None => Ok(false),
+        }
+    }
+
+    /// 批量删除交易记录
+    pub async fn delete_by_short_ids(&self, short_ids: &[String]) -> Result<Vec<(String, bool)>> {
+        let mut results = Vec::new();
+        for id in short_ids {
+            let success = self.delete_by_short_id(id).await?;
+            results.push((id.clone(), success));
+        }
+        Ok(results)
     }
 }
 

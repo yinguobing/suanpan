@@ -5,14 +5,29 @@ use comfy_table::Table;
 use crate::db::surreal::Database;
 use crate::error::Result;
 
-/// 将 SurrealDB Datetime 格式化为本地时间字符串
+/// 将 SurrealDB Datetime 格式化为本地时间字符串（完整格式）
 fn format_datetime(dt: &surrealdb::Datetime) -> String {
-    // SurrealDB Datetime 内部是 chrono::DateTime<Utc>
-    // 使用 into_inner 获取内部的 sql::Datetime，再转为 DateTime<Utc>
     let sql_dt: surrealdb::sql::Datetime = dt.to_owned().into_inner();
     let utc_dt: chrono::DateTime<chrono::Utc> = sql_dt.into();
     let local_dt: chrono::DateTime<Local> = utc_dt.into();
-    local_dt.format("%Y-%m-%d %H:%M").to_string()
+    local_dt.format("%Y-%m-%d %H:%M:%S").to_string()
+}
+
+/// 从 RecordId 提取短 ID（前12位）
+fn format_short_id(id: &Option<surrealdb::RecordId>) -> String {
+    match id {
+        Some(rid) => {
+            let full_id = rid.to_string();
+            // RecordId 格式: transaction:xxxxxxxxxxxxx
+            // 提取冒号后的前12位
+            full_id
+                .split(':')
+                .nth(1)
+                .map(|s| s.chars().take(12).collect())
+                .unwrap_or_else(|| "unknown".to_string())
+        }
+        None => "unknown".to_string(),
+    }
 }
 
 /// 列出交易记录
@@ -59,7 +74,7 @@ pub async fn execute(db: &Database, args: ListArgs) -> Result<()> {
 
     let mut table = Table::new();
     table.set_header(vec![
-        "时间", "类型", "金额", "货币", "账户", "去向", "分类", "描述",
+        "时间", "类型", "金额", "货币", "账户", "去向", "分类", "描述", "ID",
     ]);
 
     for tx in transactions.iter().take(args.limit) {
@@ -71,6 +86,7 @@ pub async fn execute(db: &Database, args: ListArgs) -> Result<()> {
         let account_to = tx.account_to.as_deref().unwrap_or("-");
         let category = &tx.category;
         let description = tx.description.as_deref().unwrap_or("-");
+        let short_id = format_short_id(&tx.id);
 
         table.add_row(vec![
             &time,
@@ -81,6 +97,7 @@ pub async fn execute(db: &Database, args: ListArgs) -> Result<()> {
             account_to,
             category,
             description,
+            &short_id,
         ]);
     }
 

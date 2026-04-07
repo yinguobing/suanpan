@@ -3,7 +3,7 @@ use clap::Parser;
 use dirs::data_dir;
 use std::path::PathBuf;
 
-use finance_cli::commands::{add, list, stats, Cli, Commands};
+use finance_cli::commands::{add, delete, list, stats, Cli, Commands};
 use finance_cli::db::surreal::Database;
 
 #[tokio::main]
@@ -21,6 +21,7 @@ async fn main() -> Result<()> {
     // 执行命令
     match cli.command {
         Commands::Add(args) => add::execute(&db, args).await?,
+        Commands::Delete(args) => delete::execute(&db, args).await?,
         Commands::List(args) => list::execute(&db, args).await?,
         Commands::Stats(args) => stats::execute(&db, args).await?,
     }
