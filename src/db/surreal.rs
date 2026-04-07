@@ -380,18 +380,23 @@ impl Database {
 
     /// 创建账户
     pub async fn create_account(&self, account: Account) -> Result<Account> {
-        let created: Option<Account> = self
-            .db
-            .create("account")
-            .content(account)
+        let id = account.id.clone();
+        let sql = r#"CREATE type::thing("account", $id) CONTENT { name: $name, account_type: $account_type, parent_id: $parent_id, created_at: time::now() }"#;
+        self.db
+            .query(sql)
+            .bind(("id", id.clone()))
+            .bind(("name", account.name))
+            .bind(("account_type", account.account_type))
+            .bind(("parent_id", account.parent_id))
             .await
             .map_err(FinanceError::Database)?;
-        created.ok_or_else(|| FinanceError::Unknown("创建账户失败".to_string()))
+        // 重新查询获取创建的记录
+        self.get_account(&id).await?.ok_or_else(|| FinanceError::Unknown("创建账户失败".to_string()))
     }
 
     /// 根据ID获取账户
     pub async fn get_account(&self, id: &str) -> Result<Option<Account>> {
-        let sql = "SELECT * FROM account WHERE id = $id";
+        let sql = "SELECT string::split(<string> id, ':')[1] as id, name, account_type, parent_id, created_at FROM account WHERE id = type::thing('account', $id)";
         let mut result = self
             .db
             .query(sql)
@@ -404,7 +409,7 @@ impl Database {
 
     /// 根据名称查找账户
     pub async fn find_account_by_name(&self, name: &str) -> Result<Option<Account>> {
-        let sql = "SELECT * FROM account WHERE name = $name";
+        let sql = "SELECT string::split(<string> id, ':')[1] as id, name, account_type, parent_id, created_at FROM account WHERE name = $name";
         let mut result = self
             .db
             .query(sql)
@@ -417,7 +422,7 @@ impl Database {
 
     /// 列出所有账户
     pub async fn list_accounts(&self) -> Result<Vec<Account>> {
-        let sql = "SELECT * FROM account ORDER BY name";
+        let sql = "SELECT string::split(<string> id, ':')[1] as id, name, account_type, parent_id, created_at FROM account ORDER BY name";
         let mut result = self.db.query(sql).await.map_err(FinanceError::Database)?;
         let accounts: Vec<Account> = result.take(0).map_err(FinanceError::Database)?;
         Ok(accounts)
@@ -425,7 +430,7 @@ impl Database {
 
     /// 列出子账户
     pub async fn list_child_accounts(&self, parent_id: &str) -> Result<Vec<Account>> {
-        let sql = "SELECT * FROM account WHERE parent_id = $parent_id ORDER BY name";
+        let sql = "SELECT string::split(<string> id, ':')[1] as id, name, account_type, parent_id, created_at FROM account WHERE parent_id = $parent_id ORDER BY name";
         let mut result = self
             .db
             .query(sql)
@@ -438,7 +443,7 @@ impl Database {
 
     /// 更新账户名称
     pub async fn update_account(&self, id: &str, name: &str) -> Result<Option<Account>> {
-        let sql = "UPDATE account SET name = $name WHERE id = $id";
+        let sql = "UPDATE account SET name = $name WHERE id = type::thing('account', $id)";
         let mut result = self
             .db
             .query(sql)
@@ -452,7 +457,7 @@ impl Database {
 
     /// 删除账户
     pub async fn delete_account(&self, id: &str) -> Result<bool> {
-        let sql = "DELETE FROM account WHERE id = $id";
+        let sql = "DELETE FROM account WHERE id = type::thing('account', $id)";
         let mut result = self
             .db
             .query(sql)
@@ -467,18 +472,24 @@ impl Database {
 
     /// 创建分类
     pub async fn create_category(&self, category: Category) -> Result<Category> {
-        let created: Option<Category> = self
-            .db
-            .create("category")
-            .content(category)
+        let id = category.id.clone();
+        let sql = r#"CREATE type::thing("category", $id) CONTENT { name: $name, parent_id: $parent_id, full_path: $full_path, level: $level, created_at: time::now() }"#;
+        self.db
+            .query(sql)
+            .bind(("id", id.clone()))
+            .bind(("name", category.name))
+            .bind(("parent_id", category.parent_id))
+            .bind(("full_path", category.full_path))
+            .bind(("level", category.level as i64))
             .await
             .map_err(FinanceError::Database)?;
-        created.ok_or_else(|| FinanceError::Unknown("创建分类失败".to_string()))
+        // 重新查询获取创建的记录
+        self.get_category(&id).await?.ok_or_else(|| FinanceError::Unknown("创建分类失败".to_string()))
     }
 
     /// 根据ID获取分类
     pub async fn get_category(&self, id: &str) -> Result<Option<Category>> {
-        let sql = "SELECT * FROM category WHERE id = $id";
+        let sql = "SELECT string::split(<string> id, ':')[1] as id, name, parent_id, full_path, level, created_at FROM category WHERE id = type::thing('category', $id)";
         let mut result = self
             .db
             .query(sql)
@@ -491,7 +502,7 @@ impl Database {
 
     /// 根据完整路径获取分类
     pub async fn get_category_by_path(&self, full_path: &str) -> Result<Option<Category>> {
-        let sql = "SELECT * FROM category WHERE full_path = $path";
+        let sql = "SELECT string::split(<string> id, ':')[1] as id, name, parent_id, full_path, level, created_at FROM category WHERE full_path = $path";
         let mut result = self
             .db
             .query(sql)
@@ -504,7 +515,7 @@ impl Database {
 
     /// 列出所有分类
     pub async fn list_categories(&self) -> Result<Vec<Category>> {
-        let sql = "SELECT * FROM category ORDER BY full_path";
+        let sql = "SELECT string::split(<string> id, ':')[1] as id, name, parent_id, full_path, level, created_at FROM category ORDER BY full_path";
         let mut result = self.db.query(sql).await.map_err(FinanceError::Database)?;
         let categories: Vec<Category> = result.take(0).map_err(FinanceError::Database)?;
         Ok(categories)
@@ -512,7 +523,7 @@ impl Database {
 
     /// 列出子分类
     pub async fn list_child_categories(&self, parent_id: &str) -> Result<Vec<Category>> {
-        let sql = "SELECT * FROM category WHERE parent_id = $parent_id ORDER BY name";
+        let sql = "SELECT string::split(<string> id, ':')[1] as id, name, parent_id, full_path, level, created_at FROM category WHERE parent_id = $parent_id ORDER BY name";
         let mut result = self
             .db
             .query(sql)
@@ -539,7 +550,7 @@ impl Database {
         };
 
         // 更新当前分类
-        let sql = "UPDATE category SET name = $name, full_path = $path WHERE id = $id";
+        let sql = "UPDATE category SET name = $name, full_path = $path WHERE id = type::thing('category', $id)";
         let mut result = self
             .db
             .query(sql)
@@ -590,7 +601,7 @@ impl Database {
 
         // 从叶子到根删除
         for cat_id in to_delete.iter().rev() {
-            let sql = "DELETE FROM category WHERE id = $id";
+            let sql = "DELETE FROM category WHERE id = type::thing('category', $id)";
             self.db
                 .query(sql)
                 .bind(("id", cat_id.to_string()))
@@ -605,18 +616,22 @@ impl Database {
 
     /// 创建标签
     pub async fn create_tag(&self, tag: Tag) -> Result<Tag> {
-        let created: Option<Tag> = self
-            .db
-            .create("tag")
-            .content(tag)
+        let id = tag.id.clone();
+        let sql = r#"CREATE type::thing("tag", $id) CONTENT { name: $name, color: $color, created_at: time::now() }"#;
+        self.db
+            .query(sql)
+            .bind(("id", id.clone()))
+            .bind(("name", tag.name))
+            .bind(("color", tag.color))
             .await
             .map_err(FinanceError::Database)?;
-        created.ok_or_else(|| FinanceError::Unknown("创建标签失败".to_string()))
+        // 重新查询获取创建的记录
+        self.get_tag(&id).await?.ok_or_else(|| FinanceError::Unknown("创建标签失败".to_string()))
     }
 
     /// 根据ID获取标签
     pub async fn get_tag(&self, id: &str) -> Result<Option<Tag>> {
-        let sql = "SELECT * FROM tag WHERE id = $id";
+        let sql = "SELECT string::split(<string> id, ':')[1] as id, name, color, created_at FROM tag WHERE id = type::thing('tag', $id)";
         let mut result = self
             .db
             .query(sql)
@@ -629,7 +644,7 @@ impl Database {
 
     /// 根据名称查找标签
     pub async fn find_tag_by_name(&self, name: &str) -> Result<Option<Tag>> {
-        let sql = "SELECT * FROM tag WHERE name = $name";
+        let sql = "SELECT string::split(<string> id, ':')[1] as id, name, color, created_at FROM tag WHERE name = $name";
         let mut result = self
             .db
             .query(sql)
@@ -642,7 +657,7 @@ impl Database {
 
     /// 列出所有标签
     pub async fn list_tags(&self) -> Result<Vec<Tag>> {
-        let sql = "SELECT * FROM tag ORDER BY name";
+        let sql = "SELECT string::split(<string> id, ':')[1] as id, name, color, created_at FROM tag ORDER BY name";
         let mut result = self.db.query(sql).await.map_err(FinanceError::Database)?;
         let tags: Vec<Tag> = result.take(0).map_err(FinanceError::Database)?;
         Ok(tags)
@@ -650,7 +665,7 @@ impl Database {
 
     /// 更新标签
     pub async fn update_tag(&self, id: &str, name: &str) -> Result<Option<Tag>> {
-        let sql = "UPDATE tag SET name = $name WHERE id = $id";
+        let sql = "UPDATE tag SET name = $name WHERE id = type::thing('tag', $id)";
         let mut result = self
             .db
             .query(sql)
@@ -665,7 +680,7 @@ impl Database {
     /// 删除标签
     pub async fn delete_tag(&self, id: &str) -> Result<bool> {
         // TODO: 从所有Transaction中移除该标签ID
-        let sql = "DELETE FROM tag WHERE id = $id";
+        let sql = "DELETE FROM tag WHERE id = type::thing('tag', $id)";
         let mut result = self
             .db
             .query(sql)
