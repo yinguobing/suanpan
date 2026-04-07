@@ -55,18 +55,15 @@ impl Default for TxType {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum TxSource {
-    /// AI 解析自然语言
-    AiParsed,
     /// 银行账单导入
     CsvImport,
-    /// 手动录入
+    /// 手动录入（CLI 参数）
     Manual,
 }
 
 impl fmt::Display for TxSource {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            TxSource::AiParsed => write!(f, "AI解析"),
             TxSource::CsvImport => write!(f, "CSV导入"),
             TxSource::Manual => write!(f, "手动录入"),
         }

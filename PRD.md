@@ -3,10 +3,10 @@
 ## 1. 产品概述
 
 ### 1.1 产品定位
-高度私人化的本地财务管理系统，以 AI 助手为核心交互入口，实现自然语言记账、多源数据整合和智能财务分析。
+高度私人化的本地财务管理系统，以 CLI 为核心交互入口，通过结构化参数实现高效记账、多源数据整合和财务分析。
 
 ### 1.2 核心理念
-- **AI 优先**：人类通过自然语言与系统交互，AI 负责解析和结构化
+- **CLI 优先**：通过结构化命令行参数进行交互，简洁高效
 - **资金流动为核心**：所有财务活动抽象为资金的流动，简化数据模型
 - **渐进式演进**：分阶段迭代，MVP 聚焦核心记账和查询功能
 
@@ -16,7 +16,7 @@
 
 **主要用户**：尹国冰
 - 需要长期、持续的财务记录
-- 偏好自然语言交互
+- 偏好简洁高效的命令行操作
 - 重视数据隐私和本地控制
 - 有技术背景，可进行二次开发
 
@@ -28,7 +28,7 @@
 目标：建立基础记账能力，验证核心交互流程
 
 **功能范围：**
-- ✅ 自然语言录入（AI 解析）
+- ✅ 结构化参数录入（CLI 参数）
 - ✅ 流水记录存储与查询
 - ✅ 基础统计（月度汇总、分类占比）
 - ✅ CLI 界面
@@ -74,12 +74,9 @@ finance-cli/
 │   ├── models/              # 数据模型
 │   │   ├── mod.rs
 │   │   ├── transaction.rs   # 交易记录
-│   │   ├── category.rs      # 分类定义
-│   │   └── account.rs       # 账户定义
+│   │   └── types.rs         # 枚举类型
 │   ├── db/                  # 数据库层
 │   │   └── surreal.rs       # SurrealDB 封装
-│   ├── parser/              # AI 解析层
-│   │   └── natural_language.rs
 │   ├── commands/            # CLI 子命令
 │   │   ├── add.rs
 │   │   ├── list.rs
@@ -107,9 +104,8 @@ enum TxType {
 
 /// 数据来源
 enum TxSource {
-    AiParsed,       // AI 解析自然语言
     CsvImport,      // 银行账单导入
-    Manual,         // 手动录入
+    Manual,         // 手动录入（CLI 参数）
 }
 
 /// 交易记录
@@ -148,7 +144,6 @@ struct Transaction {
 #### 账户设计（阶段一简化版）
 - `account_from` 和 `account_to` 使用 `String`
 - 不进行严格的外键约束
-- AI 解析时自动创建新账户
 - 阶段二再考虑账户管理和命名规范化
 
 #### 分类、标签、元数据三层设计
@@ -190,30 +185,36 @@ struct Transaction {
 
 ## 6. 交互设计
 
-### 6.1 自然语言输入示例
+### 6.1 命令行参数输入示例
 
-用户输入 → AI 解析 → 确认 → 存储
-
-```
-用户：中午食堂吃饭花了35，用支付宝付的
-
-AI 解析：
-- amount: 35.00
-- currency: CNY
-- tx_type: Expense
-- account_from: "支付宝"
-- account_to: "食堂"
-- category: "餐饮"
-- description: "中午食堂吃饭"
-
-AI 回复：确认记录：餐饮支出 ¥35.00，支付宝 → 食堂。确认？[Y/n]
-```
-
-### 6.2 CLI 命令
+CLI 通过结构化参数接收交易信息，直接录入无需确认：
 
 ```bash
-# 添加流水（自然语言）
-finance add "午餐35支付宝"
+# 添加一笔支出
+finance add -a 35 -f 支付宝 -o 食堂 -c 餐饮 -d "午餐"
+
+# 添加一笔收入
+finance add -a 8500 -t income -f 公司 -o 招行卡 -c 工资 -d "三月工资"
+
+# 添加转账记录
+finance add -a 1000 -t transfer -f 招行卡 -o 支付宝 -c 转账
+```
+
+参数说明：
+- `-a, --amount`: 金额（必填）
+- `-t, --tx-type`: 交易类型，默认为 expense
+- `-f, --from`: 来源账户（必填）
+- `-o, --to`: 去向账户/商户（可选）
+- `-c, --category`: 分类，默认为"其他"
+- `-d, --description`: 描述/备注（可选）
+- `-y, --currency`: 货币，默认为 CNY
+- `-g, --tag`: 标签，可多次使用
+
+### 6.2 CLI 命令参考
+
+```bash
+# 添加交易记录（结构化参数）
+finance add -a 35 -f 支付宝 -o 食堂 -c 餐饮 -d "午餐"
 
 # 列出最近流水
 finance list --limit 20
@@ -222,7 +223,7 @@ finance list --limit 20
 finance stats --month 2025-04
 
 # 按分类统计
-finance stats --category 餐饮 --from 2025-01-01 --to 2025-04-30
+finance stats --by-category
 ```
 
 ---
