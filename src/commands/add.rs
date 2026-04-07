@@ -80,16 +80,23 @@ impl From<TxTypeArg> for TxType {
 pub async fn execute(db: &Database, args: AddArgs) -> Result<()> {
     let tx_type: TxType = args.tx_type.into();
 
+    // TODO: 批次2将添加账户/分类/标签的自动查找/创建
+    // 当前简化处理：直接使用用户输入作为ID
+    let account_from_id = format!("acc_{}", args.from);
+    let account_to_id = args.to.map(|t| format!("acc_{}", t));
+    let category_id = format!("cat_{}", args.category);
+    let tag_ids: Vec<String> = args.tag.into_iter().map(|t| format!("tag_{}", t)).collect();
+
     let transaction = Transaction::new(
         args.amount,
         args.currency,
         tx_type,
-        args.from,
-        args.to,
-        args.category,
+        account_from_id,
+        account_to_id,
+        category_id,
         args.description,
     )
-    .with_tags(args.tag);
+    .with_tag_ids(tag_ids);
 
     let created = db.create_transaction(transaction).await?;
 
@@ -97,13 +104,13 @@ pub async fn execute(db: &Database, args: AddArgs) -> Result<()> {
     println!("   ID: {:?}", created.id);
     println!("   类型: {}", created.tx_type);
     println!("   金额: {} {}", created.amount, created.currency);
-    println!("   账户: {} -> {}", created.account_from, created.account_to.as_deref().unwrap_or("-"));
-    println!("   分类: {}", created.category);
+    println!("   账户: {} -> {}", created.account_from_id, created.account_to_id.as_deref().unwrap_or("-"));
+    println!("   分类: {}", created.category_id);
     if let Some(desc) = &created.description {
         println!("   描述: {}", desc);
     }
-    if !created.tags.is_empty() {
-        println!("   标签: {}", created.tags.join(", "));
+    if !created.tag_ids.is_empty() {
+        println!("   标签: {}", created.tag_ids.join(", "));
     }
 
     Ok(())

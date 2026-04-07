@@ -74,26 +74,27 @@ pub async fn execute(db: &Database, args: UpdateArgs) -> Result<()> {
     };
 
     // 构建更新参数
+    // TODO: 批次2将添加账户/分类/标签的自动查找/创建
     let updates = TransactionUpdate {
         amount: args.amount,
         currency: args.currency,
         tx_type,
-        account_from: args.from,
-        account_to: if args.to.is_some() {
-            Some(args.to)
+        account_from_id: args.from.map(|f| format!("acc_{}", f)),
+        account_to_id: if args.to.is_some() {
+            Some(args.to.map(|t| format!("acc_{}", t)))
         } else {
             None
         },
-        category: args.category,
+        category_id: args.category.map(|c| format!("cat_{}", c)),
         description: if args.description.is_some() {
             Some(args.description)
         } else {
             None
         },
-        tags: if args.tag.is_empty() {
+        tag_ids: if args.tag.is_empty() {
             None
         } else {
-            Some(args.tag)
+            Some(args.tag.into_iter().map(|t| format!("tag_{}", t)).collect())
         },
     };
 
@@ -106,15 +107,15 @@ pub async fn execute(db: &Database, args: UpdateArgs) -> Result<()> {
             println!("   金额: {} {}", tx.amount, tx.currency);
             println!(
                 "   账户: {} -> {}",
-                tx.account_from,
-                tx.account_to.as_deref().unwrap_or("-")
+                tx.account_from_id,
+                tx.account_to_id.as_deref().unwrap_or("-")
             );
-            println!("   分类: {}", tx.category);
+            println!("   分类: {}", tx.category_id);
             if let Some(desc) = &tx.description {
                 println!("   描述: {}", desc);
             }
-            if !tx.tags.is_empty() {
-                println!("   标签: {}", tx.tags.join(", "));
+            if !tx.tag_ids.is_empty() {
+                println!("   标签: {}", tx.tag_ids.join(", "));
             }
         }
         None => {

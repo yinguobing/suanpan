@@ -82,9 +82,10 @@ pub async fn execute(db: &Database, args: ListArgs) -> Result<()> {
         let tx_type = format!("{}", tx.tx_type);
         let amount = tx.amount.to_string();
         let currency = &tx.currency;
-        let account_from = &tx.account_from;
-        let account_to = tx.account_to.as_deref().unwrap_or("-");
-        let category = &tx.category;
+        // TODO: 批次2将添加ID到名称的查询
+        let account_from = &tx.account_from_id;
+        let account_to = tx.account_to_id.as_deref().unwrap_or("-");
+        let category = &tx.category_id;
         let description = tx.description.as_deref().unwrap_or("-");
         let short_id = format_short_id(&tx.id);
 

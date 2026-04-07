@@ -17,11 +17,11 @@ pub struct TransactionUpdate {
     pub amount: Option<Decimal>,
     pub currency: Option<String>,
     pub tx_type: Option<TxType>,
-    pub account_from: Option<String>,
-    pub account_to: Option<Option<String>>,
-    pub category: Option<String>,
+    pub account_from_id: Option<String>,
+    pub account_to_id: Option<Option<String>>,
+    pub category_id: Option<String>,
     pub description: Option<Option<String>>,
-    pub tags: Option<Vec<String>>,
+    pub tag_ids: Option<Vec<String>>,
 }
 
 /// 数据库封装
@@ -187,8 +187,9 @@ impl Database {
                 crate::models::TxType::Income => total_income += tx.amount,
                 crate::models::TxType::Expense => {
                     total_expense += tx.amount;
+                    // TODO: 批次2将添加根据category_id查询category.name
                     *category_breakdown
-                        .entry(tx.category.clone())
+                        .entry(tx.category_id.clone())
                         .or_insert_with(Decimal::zero) += tx.amount;
                 }
                 _ => {}
@@ -290,15 +291,15 @@ impl Database {
             #[serde(skip_serializing_if = "Option::is_none")]
             tx_type: Option<TxType>,
             #[serde(skip_serializing_if = "Option::is_none")]
-            account_from: Option<String>,
+            account_from_id: Option<String>,
             #[serde(skip_serializing_if = "Option::is_none")]
-            account_to: Option<Option<String>>,
+            account_to_id: Option<Option<String>>,
             #[serde(skip_serializing_if = "Option::is_none")]
-            category: Option<String>,
+            category_id: Option<String>,
             #[serde(skip_serializing_if = "Option::is_none")]
             description: Option<Option<String>>,
             #[serde(skip_serializing_if = "Option::is_none")]
-            tags: Option<Vec<String>>,
+            tag_ids: Option<Vec<String>>,
             updated_at: Datetime,
         }
 
@@ -306,11 +307,11 @@ impl Database {
             amount: updates.amount,
             currency: updates.currency,
             tx_type: updates.tx_type,
-            account_from: updates.account_from,
-            account_to: updates.account_to,
-            category: updates.category,
+            account_from_id: updates.account_from_id,
+            account_to_id: updates.account_to_id,
+            category_id: updates.category_id,
             description: updates.description,
-            tags: updates.tags,
+            tag_ids: updates.tag_ids,
             updated_at: Datetime::from(Utc::now()),
         };
 
