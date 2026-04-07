@@ -12,7 +12,7 @@ fn format_datetime(dt: &surrealdb::Datetime) -> String {
     let sql_dt: surrealdb::sql::Datetime = dt.to_owned().into_inner();
     let utc_dt: chrono::DateTime<chrono::Utc> = sql_dt.into();
     let local_dt: chrono::DateTime<Local> = utc_dt.into();
-    local_dt.format("%m-%d %H:%M").to_string()
+    local_dt.format("%Y-%m-%d %H:%M").to_string()
 }
 
 /// 列出交易记录
@@ -58,7 +58,9 @@ pub async fn execute(db: &Database, args: ListArgs) -> Result<()> {
     }
 
     let mut table = Table::new();
-    table.set_header(vec!["时间", "类型", "金额", "货币", "账户", "去向", "分类", "描述"]);
+    table.set_header(vec![
+        "时间", "类型", "金额", "货币", "账户", "去向", "分类", "描述",
+    ]);
 
     for tx in transactions.iter().take(args.limit) {
         let time = format_datetime(&tx.timestamp);
