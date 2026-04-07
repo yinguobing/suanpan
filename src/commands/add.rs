@@ -108,3 +108,54 @@ pub async fn execute(db: &Database, args: AddArgs) -> Result<()> {
 
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::str::FromStr;
+
+    #[test]
+    fn test_tx_type_arg_from_str() {
+        // 英文
+        assert!(matches!(TxTypeArg::from_str("expense").unwrap(), TxTypeArg::Expense));
+        assert!(matches!(TxTypeArg::from_str("income").unwrap(), TxTypeArg::Income));
+        assert!(matches!(TxTypeArg::from_str("transfer").unwrap(), TxTypeArg::Transfer));
+        assert!(matches!(TxTypeArg::from_str("debt").unwrap(), TxTypeArg::DebtChange));
+        assert!(matches!(TxTypeArg::from_str("credit").unwrap(), TxTypeArg::CreditChange));
+
+        // 中文
+        assert!(matches!(TxTypeArg::from_str("支出").unwrap(), TxTypeArg::Expense));
+        assert!(matches!(TxTypeArg::from_str("收入").unwrap(), TxTypeArg::Income));
+        assert!(matches!(TxTypeArg::from_str("转账").unwrap(), TxTypeArg::Transfer));
+        assert!(matches!(TxTypeArg::from_str("债务").unwrap(), TxTypeArg::DebtChange));
+        assert!(matches!(TxTypeArg::from_str("债权").unwrap(), TxTypeArg::CreditChange));
+
+        // 缩写
+        assert!(matches!(TxTypeArg::from_str("e").unwrap(), TxTypeArg::Expense));
+        assert!(matches!(TxTypeArg::from_str("i").unwrap(), TxTypeArg::Income));
+        assert!(matches!(TxTypeArg::from_str("t").unwrap(), TxTypeArg::Transfer));
+        assert!(matches!(TxTypeArg::from_str("d").unwrap(), TxTypeArg::DebtChange));
+        assert!(matches!(TxTypeArg::from_str("c").unwrap(), TxTypeArg::CreditChange));
+
+        // 错误情况
+        assert!(TxTypeArg::from_str("unknown").is_err());
+    }
+
+    #[test]
+    fn test_tx_type_arg_into_tx_type() {
+        let tx_type: TxType = TxTypeArg::Expense.into();
+        assert!(matches!(tx_type, TxType::Expense));
+
+        let tx_type: TxType = TxTypeArg::Income.into();
+        assert!(matches!(tx_type, TxType::Income));
+
+        let tx_type: TxType = TxTypeArg::Transfer.into();
+        assert!(matches!(tx_type, TxType::Transfer));
+
+        let tx_type: TxType = TxTypeArg::DebtChange.into();
+        assert!(matches!(tx_type, TxType::DebtChange));
+
+        let tx_type: TxType = TxTypeArg::CreditChange.into();
+        assert!(matches!(tx_type, TxType::CreditChange));
+    }
+}

@@ -75,3 +75,57 @@ impl Default for TxSource {
         TxSource::Manual
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tx_type_from_str() {
+        // 英文
+        assert_eq!(TxType::from_str("expense").unwrap(), TxType::Expense);
+        assert_eq!(TxType::from_str("income").unwrap(), TxType::Income);
+        assert_eq!(TxType::from_str("transfer").unwrap(), TxType::Transfer);
+        assert_eq!(TxType::from_str("debtchange").unwrap(), TxType::DebtChange);
+        assert_eq!(TxType::from_str("creditchange").unwrap(), TxType::CreditChange);
+
+        // 中文
+        assert_eq!(TxType::from_str("支出").unwrap(), TxType::Expense);
+        assert_eq!(TxType::from_str("收入").unwrap(), TxType::Income);
+        assert_eq!(TxType::from_str("转账").unwrap(), TxType::Transfer);
+        assert_eq!(TxType::from_str("债务变动").unwrap(), TxType::DebtChange);
+        assert_eq!(TxType::from_str("债权变动").unwrap(), TxType::CreditChange);
+
+        // 大小写不敏感
+        assert_eq!(TxType::from_str("EXPENSE").unwrap(), TxType::Expense);
+        assert_eq!(TxType::from_str("Income").unwrap(), TxType::Income);
+
+        // 错误情况
+        assert!(TxType::from_str("unknown").is_err());
+    }
+
+    #[test]
+    fn test_tx_type_display() {
+        assert_eq!(TxType::Expense.to_string(), "支出");
+        assert_eq!(TxType::Income.to_string(), "收入");
+        assert_eq!(TxType::Transfer.to_string(), "转账");
+        assert_eq!(TxType::DebtChange.to_string(), "债务变动");
+        assert_eq!(TxType::CreditChange.to_string(), "债权变动");
+    }
+
+    #[test]
+    fn test_tx_type_default() {
+        assert_eq!(TxType::default(), TxType::Expense);
+    }
+
+    #[test]
+    fn test_tx_source_display() {
+        assert_eq!(TxSource::CsvImport.to_string(), "CSV导入");
+        assert_eq!(TxSource::Manual.to_string(), "手动录入");
+    }
+
+    #[test]
+    fn test_tx_source_default() {
+        assert_eq!(TxSource::default(), TxSource::Manual);
+    }
+}

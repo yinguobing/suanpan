@@ -94,3 +94,30 @@ fn parse_date(date_str: &str) -> Result<chrono::NaiveDate> {
     chrono::NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
         .map_err(|e| crate::error::FinanceError::Parse(format!("日期格式错误: {}", e)))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use chrono::Datelike;
+
+    #[test]
+    fn test_parse_date_valid() {
+        let date = parse_date("2025-04-06").unwrap();
+        assert_eq!(date.year(), 2025);
+        assert_eq!(date.month(), 4);
+        assert_eq!(date.day(), 6);
+    }
+
+    #[test]
+    fn test_parse_date_invalid_format() {
+        assert!(parse_date("2025/04/06").is_err());
+        assert!(parse_date("06-04-2025").is_err());
+        assert!(parse_date("invalid").is_err());
+    }
+
+    #[test]
+    fn test_parse_date_invalid_date() {
+        assert!(parse_date("2025-13-01").is_err()); // 无效月份
+        assert!(parse_date("2025-04-32").is_err()); // 无效日期
+    }
+}

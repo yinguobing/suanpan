@@ -116,3 +116,95 @@ impl Default for Transaction {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use rust_decimal_macros::dec;
+
+    #[test]
+    fn test_transaction_new() {
+        let tx = Transaction::new(
+            dec!(100.50),
+            "CNY",
+            TxType::Expense,
+            "支付宝",
+            Some("超市"),
+            "购物",
+            Some("日用品"),
+        );
+
+        assert_eq!(tx.amount, dec!(100.50));
+        assert_eq!(tx.currency, "CNY");
+        assert!(matches!(tx.tx_type, TxType::Expense));
+        assert_eq!(tx.account_from, "支付宝");
+        assert_eq!(tx.account_to, Some("超市".to_string()));
+        assert_eq!(tx.category, "购物");
+        assert_eq!(tx.description, Some("日用品".to_string()));
+        assert!(tx.tags.is_empty());
+        assert!(tx.metadata.is_none());
+        assert!(matches!(tx.source, TxSource::Manual));
+    }
+
+    #[test]
+    fn test_transaction_with_tags() {
+        let tx = Transaction::new(
+            dec!(50),
+            "CNY",
+            TxType::Expense,
+            "现金",
+            None::<String>,
+            "餐饮",
+            None::<String>,
+        )
+        .with_tags(vec!["工作餐".to_string(), "周一".to_string()]);
+
+        assert_eq!(tx.tags.len(), 2);
+        assert_eq!(tx.tags[0], "工作餐");
+        assert_eq!(tx.tags[1], "周一");
+    }
+
+    #[test]
+    fn test_transaction_with_source() {
+        let tx = Transaction::new(
+            dec!(1000),
+            "CNY",
+            TxType::Income,
+            "公司",
+            Some("招行卡"),
+            "工资",
+            Some("三月工资"),
+        )
+        .with_source(TxSource::CsvImport);
+
+        assert!(matches!(tx.source, TxSource::CsvImport));
+    }
+
+    #[test]
+    fn test_transaction_default() {
+        let tx = Transaction::default();
+
+        assert_eq!(tx.amount, Decimal::ZERO);
+        assert_eq!(tx.currency, "CNY");
+        assert!(matches!(tx.tx_type, TxType::Expense));
+        assert_eq!(tx.category, "其他");
+        assert!(tx.account_from.is_empty());
+        assert!(tx.tags.is_empty());
+    }
+
+    #[test]
+    fn test_transaction_without_optional_fields() {
+        let tx = Transaction::new(
+            dec!(35),
+            "CNY",
+            TxType::Expense,
+            "支付宝",
+            None::<String>,
+            "餐饮",
+            None::<String>,
+        );
+
+        assert_eq!(tx.account_to, None);
+        assert_eq!(tx.description, None);
+    }
+}

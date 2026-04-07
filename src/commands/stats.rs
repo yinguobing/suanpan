@@ -91,3 +91,35 @@ fn parse_month(month_str: &str) -> Result<(i32, u32)> {
 
     Ok((year, month))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_month_valid() {
+        assert_eq!(parse_month("2025-04").unwrap(), (2025, 4));
+        assert_eq!(parse_month("2024-12").unwrap(), (2024, 12));
+        assert_eq!(parse_month("2023-01").unwrap(), (2023, 1));
+    }
+
+    #[test]
+    fn test_parse_month_invalid_format() {
+        assert!(parse_month("2025/04").is_err());
+        assert!(parse_month("2025").is_err());
+        assert!(parse_month("04-2025").is_err());
+        assert!(parse_month("invalid").is_err());
+    }
+
+    #[test]
+    fn test_parse_month_invalid_month() {
+        assert!(parse_month("2025-00").is_err());
+        assert!(parse_month("2025-13").is_err());
+        assert!(parse_month("2025-99").is_err());
+    }
+
+    #[test]
+    fn test_parse_month_invalid_year() {
+        assert!(parse_month("invalid-04").is_err());
+    }
+}
