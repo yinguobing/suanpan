@@ -83,7 +83,8 @@ finance-cli/
 │   │   ├── delete.rs
 │   │   ├── update.rs
 │   │   ├── list.rs
-│   │   └── stats.rs
+│   │   ├── stats.rs
+│   │   └── category.rs      # 分类管理
 │   └── error.rs             # 错误处理
 └── migrations/
     └── init.surql           # 数据库初始化
@@ -123,7 +124,7 @@ struct Transaction {
     account_from: String,          // 来源账户
     account_to: Option<String>,    // 去向账户/商户/收入方
     
-    category: String,              // 分类（受控词表）
+    category_id: String,           // 分类ID（外键，关联 category 表）
     description: Option<String>,   // 原始自然语言或备注
     
     // 扩展字段
@@ -134,6 +135,15 @@ struct Transaction {
     created_at: DateTime<Local>,   // 记录创建时间
     updated_at: Option<DateTime<Local>>, // 修改时间
     source: TxSource,              // 数据来源
+}
+
+/// 分类（支持层级）
+struct Category {
+    id: String,                    // 永久唯一ID（如 "cat_xxx"）
+    name: String,                  // 显示名称（可修改）
+    parent_id: Option<String>,     // 父分类ID（None 表示根分类）
+    full_path: String,             // 预计算完整路径（如 "餐饮/午餐"）
+    created_at: DateTime<Local>,   // 创建时间
 }
 ```
 
@@ -148,6 +158,34 @@ struct Transaction {
 - `account_from` 和 `account_to` 使用 `String`
 - 不进行严格的外键约束
 - 阶段二再考虑账户管理和命名规范化
+
+#### 分类设计（ID 与名称解耦）
+- **独立分类表**：`category` 表存储 ID、名称、父子关系
+- **Transaction 存 ID**：`category_id` 字段存储永久 ID，不是名称
+- **层级支持**：通过 `parent_id` 指针实现树形结构
+- **名称可改**：修改分类名称只需更新 `category` 表，不影响历史流水
+- **预计算路径**：`full_path` 字段缓存完整路径（如 "餐饮/午餐"），加速查询
+
+**分类设计示例：**
+```
+category 表:
+┌─────────────┬──────────┬────────────┬─────────────────┐
+│ id          │ name     │ parent_id  │ full_path       │
+├─────────────┼──────────┼────────────┼─────────────────┤
+│ cat_root    │ 根       │ null       │                 │
+│ cat_food    │ 餐饮     │ cat_root   │ 餐饮            │
+│ cat_lunch   │ 午餐     │ cat_food   │ 餐饮/午餐       │
+│ cat_traffic │ 交通     │ cat_root   │ 交通            │
+└─────────────┴──────────┴────────────┴─────────────────┘
+
+修改名称后（把"餐饮"改为"吃饭"）:
+├─────────────┼──────────┼────────────┼─────────────────┤
+│ cat_food    │ 吃饭     │ cat_root   │ 吃饭            │
+│ cat_lunch   │ 午餐     │ cat_food   │ 吃饭/午餐       │ ← 级联更新
+└─────────────┴──────────┴────────────┴─────────────────┘
+
+所有 Transaction.category_id 仍为 "cat_food"，无需修改
+```
 
 #### 分类、标签、元数据三层设计
 
@@ -193,14 +231,14 @@ struct Transaction {
 CLI 通过结构化参数接收交易信息，直接录入无需确认：
 
 ```bash
-# 添加一笔支出
-finance add -a 35 -f 支付宝 -o 食堂 -c 餐饮 -d "午餐"
+# 添加一笔支出（分类使用路径格式）
+finance add -a 35 -f 支付宝 -o 食堂 -c "餐饮/午餐" -d "午餐"
 
-# 添加一笔收入
-finance add -a 8500 -t income -f 公司 -o 招行卡 -c 工资 -d "三月工资"
+# 添加一笔收入（分类使用路径格式）
+finance add -a 8500 -t income -f 公司 -o 招行卡 -c "收入/工资" -d "三月工资"
 
 # 添加转账记录
-finance add -a 1000 -t transfer -f 招行卡 -o 支付宝 -c 转账
+finance add -a 1000 -t transfer -f 招行卡 -o 支付宝 -c "转账"
 ```
 
 参数说明：
@@ -208,7 +246,7 @@ finance add -a 1000 -t transfer -f 招行卡 -o 支付宝 -c 转账
 - `-t, --tx-type`: 交易类型，默认为 expense
 - `-f, --from`: 来源账户（必填）
 - `-o, --to`: 去向账户/商户（可选）
-- `-c, --category`: 分类，默认为"其他"
+- `-c, --category`: 分类路径（如 "餐饮/午餐"），默认为"其他"
 - `-d, --description`: 描述/备注（可选）
 - `-y, --currency`: 货币，默认为 CNY
 - `-g, --tag`: 标签，可多次使用
@@ -216,8 +254,8 @@ finance add -a 1000 -t transfer -f 招行卡 -o 支付宝 -c 转账
 ### 6.2 CLI 命令参考
 
 ```bash
-# 添加交易记录（结构化参数）
-finance add -a 35 -f 支付宝 -o 食堂 -c 餐饮 -d "午餐"
+# 添加交易记录（结构化参数，分类使用路径）
+finance add -a 35 -f 支付宝 -o 食堂 -c "餐饮/午餐" -d "午餐"
 
 # 删除交易记录（通过短 ID）
 finance delete f4sp877fxbwc
@@ -234,8 +272,22 @@ finance list --limit 20
 # 按月统计
 finance stats --month 2025-04
 
-# 按分类统计
+# 按分类统计（支持层级汇总）
 finance stats --by-category
+
+# ========== 分类管理命令 ==========
+
+# 查看分类树
+finance category tree
+
+# 添加分类（指定父分类路径）
+finance category add "餐饮/午餐/食堂"
+
+# 重命名分类（自动级联更新子分类路径）
+finance category rename "餐饮" "吃饭"
+
+# 删除分类（需确保无流水关联）
+finance category delete "餐饮/午餐"
 ```
 
 **List 输出格式：**
@@ -267,6 +319,20 @@ finance stats --by-category
 ### 7.2 SurrealDB 表结构
 
 ```surql
+-- 分类表（支持层级）
+DEFINE TABLE category SCHEMAFULL;
+
+DEFINE FIELD id ON category TYPE string;                    -- 永久ID（如 "cat_xxx"）
+DEFINE FIELD name ON category TYPE string;                  -- 显示名称
+DEFINE FIELD parent_id ON category TYPE option<string>;     -- 父分类ID
+DEFINE FIELD full_path ON category TYPE string;             -- 预计算完整路径
+DEFINE FIELD created_at ON category TYPE datetime;          -- 创建时间
+
+-- 分类索引
+DEFINE INDEX idx_category_id ON category COLUMNS id UNIQUE;
+DEFINE INDEX idx_category_parent ON category COLUMNS parent_id;
+DEFINE INDEX idx_category_path ON category COLUMNS full_path;
+
 -- 交易记录表
 DEFINE TABLE transaction SCHEMAFULL;
 
@@ -277,7 +343,7 @@ DEFINE FIELD currency ON transaction TYPE string;
 DEFINE FIELD tx_type ON transaction TYPE string;
 DEFINE FIELD account_from ON transaction TYPE string;
 DEFINE FIELD account_to ON transaction TYPE option<string>;
-DEFINE FIELD category ON transaction TYPE string;
+DEFINE FIELD category_id ON transaction TYPE string;        -- 关联 category.id
 DEFINE FIELD description ON transaction TYPE option<string>;
 DEFINE FIELD tags ON transaction TYPE array<string>;
 DEFINE FIELD metadata ON transaction TYPE option<object>;
@@ -287,7 +353,7 @@ DEFINE FIELD source ON transaction TYPE string;
 
 -- 索引
 DEFINE INDEX idx_timestamp ON transaction COLUMNS timestamp;
-DEFINE INDEX idx_category ON transaction COLUMNS category;
+DEFINE INDEX idx_tx_category ON transaction COLUMNS category_id;  -- 外键索引
 DEFINE INDEX idx_account_from ON transaction COLUMNS account_from;
 DEFINE INDEX idx_tx_type ON transaction COLUMNS tx_type;
 ```
