@@ -11,6 +11,11 @@ use std::path::Path;
 use crate::error::{FinanceError, Result};
 use crate::models::{Account, Category, Tag, Transaction, TxType};
 
+/// 生成带前缀的唯一ID
+fn generate_id(prefix: &str) -> String {
+    format!("{}_{}", prefix, nanoid::nanoid!(8))
+}
+
 /// 交易记录更新参数（部分更新）
 #[derive(Debug, Default)]
 pub struct TransactionUpdate {
@@ -420,6 +425,21 @@ impl Database {
         Ok(account)
     }
 
+    /// 根据名称查找账户，如果不存在则创建（默认类型为 Other）
+    pub async fn find_or_create_account_by_name(&self, name: &str) -> Result<Account> {
+        use crate::models::{Account, AccountType};
+        
+        // 先查找
+        if let Some(account) = self.find_account_by_name(name).await? {
+            return Ok(account);
+        }
+        
+        // 不存在则创建（默认类型为 Other）
+        let id = generate_id("acc");
+        let account = Account::new(id, name, AccountType::Other);
+        self.create_account(account).await
+    }
+
     /// 列出所有账户
     pub async fn list_accounts(&self) -> Result<Vec<Account>> {
         let sql = "SELECT string::split(<string> id, ':')[1] as id, name, account_type, parent_id, created_at FROM account ORDER BY name";
@@ -511,6 +531,50 @@ impl Database {
             .map_err(FinanceError::Database)?;
         let category: Option<Category> = result.take(0).map_err(FinanceError::Database)?;
         Ok(category)
+    }
+
+    /// 根据完整路径查找分类，如果不存在则创建（自动创建父分类）
+    pub async fn find_or_create_category_by_path(&self, full_path: &str) -> Result<Category> {
+        self.find_or_create_category_by_path_impl(full_path).await
+    }
+    
+    /// 内部实现（boxed to avoid recursion in async）
+    fn find_or_create_category_by_path_impl<'a>(&'a self, full_path: &'a str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Category>> + Send + 'a>> {
+        Box::pin(async move {
+            // 先查找
+            if let Some(category) = self.get_category_by_path(full_path).await? {
+                return Ok(category);
+            }
+            
+            // 解析路径
+            let parts: Vec<&str> = full_path.split('/').collect();
+            let name = parts.last().unwrap_or(&"").to_string();
+            
+            // 查找或创建父分类
+            let parent_id = if parts.len() > 1 {
+                let parent_path = parts[..parts.len()-1].join("/");
+                let parent = self.find_or_create_category_by_path_impl(&parent_path).await?;
+                Some(parent.id)
+            } else {
+                None
+            };
+            
+            // 创建当前分类
+            use crate::models::Category;
+            use surrealdb::Datetime;
+            
+            let level = parts.len() as u32;
+            let id = generate_id("cat");
+            let category = Category {
+                id,
+                name,
+                parent_id,
+                full_path: full_path.to_string(),
+                level,
+                created_at: Datetime::from(chrono::Utc::now()),
+            };
+            self.create_category(category).await
+        })
     }
 
     /// 列出所有分类
@@ -655,6 +719,28 @@ impl Database {
         Ok(tag)
     }
 
+    /// 根据名称查找标签，如果不存在则创建
+    pub async fn find_or_create_tag_by_name(&self, name: &str) -> Result<Tag> {
+        // 先查找
+        if let Some(tag) = self.find_tag_by_name(name).await? {
+            return Ok(tag);
+        }
+        
+        // 不存在则创建
+        let id = generate_id("tag");
+        let sql = "CREATE type::thing('tag', $id) CONTENT { name: $name, created_at: time::now() }";
+        let mut result = self
+            .db
+            .query(sql)
+            .bind(("id", id.clone()))
+            .bind(("name", name.to_string()))
+            .await
+            .map_err(FinanceError::Database)?;
+        
+        let tag: Option<Tag> = result.take(0).map_err(FinanceError::Database)?;
+        tag.ok_or_else(|| FinanceError::Unknown("创建标签失败".to_string()))
+    }
+
     /// 列出所有标签
     pub async fn list_tags(&self) -> Result<Vec<Tag>> {
         let sql = "SELECT string::split(<string> id, ':')[1] as id, name, color, created_at FROM tag ORDER BY name";
@@ -740,6 +826,144 @@ impl Database {
         let tags: Vec<Tag> = result.take(0).map_err(FinanceError::Database)?;
         Ok(tags)
     }
+
+    /// 数据迁移：将旧格式数据迁移到新模型
+    pub async fn migrate_data(&self, dry_run: bool) -> Result<MigrationStats> {
+        use std::collections::HashMap;
+        use std::collections::HashSet;
+
+        let mut stats = MigrationStats {
+            transactions_migrated: 0,
+            accounts_created: 0,
+            categories_created: 0,
+            tags_created: 0,
+        };
+
+        // 1. 获取使用旧字段的交易记录
+        let old_transactions = self.get_old_transactions().await?;
+        
+        if old_transactions.is_empty() {
+            return Ok(stats);
+        }
+
+        // 2. 收集需要创建的实体
+        let mut account_names: HashSet<String> = HashSet::new();
+        let mut category_names: HashSet<String> = HashSet::new();
+        let mut tag_names: HashSet<String> = HashSet::new();
+
+        for tx in &old_transactions {
+            if !tx.account_from.is_empty() {
+                account_names.insert(tx.account_from.clone());
+            }
+            if let Some(ref to) = tx.account_to {
+                if !to.is_empty() {
+                    account_names.insert(to.clone());
+                }
+            }
+            if !tx.category.is_empty() {
+                category_names.insert(tx.category.clone());
+            }
+            for tag in &tx.tags {
+                if !tag.is_empty() {
+                    tag_names.insert(tag.clone());
+                }
+            }
+        }
+
+        // 3. 创建账户
+        let mut account_map: HashMap<String, String> = HashMap::new();
+        for name in account_names {
+            if let Some(existing) = self.find_account_by_name(&name).await? {
+                account_map.insert(name, existing.id);
+            } else if !dry_run {
+                let id = format!("acc_{}", nanoid::nanoid!(8));
+                let account = crate::models::Account::new(&id, &name, crate::models::AccountType::Other);
+                self.create_account(account).await?;
+                account_map.insert(name, id);
+                stats.accounts_created += 1;
+            }
+        }
+
+        // 4. 创建分类
+        let mut category_map: HashMap<String, String> = HashMap::new();
+        for name in category_names {
+            if let Some(existing) = self.get_category_by_path(&name).await? {
+                category_map.insert(name, existing.id);
+            } else if !dry_run {
+                let id = format!("cat_{}", nanoid::nanoid!(8));
+                let category = crate::models::Category::new_root(&id, &name);
+                self.create_category(category).await?;
+                category_map.insert(name, id);
+                stats.categories_created += 1;
+            }
+        }
+
+        // 5. 创建标签
+        let mut tag_map: HashMap<String, String> = HashMap::new();
+        for name in tag_names {
+            if let Some(existing) = self.find_tag_by_name(&name).await? {
+                tag_map.insert(name, existing.id);
+            } else if !dry_run {
+                let id = format!("tag_{}", nanoid::nanoid!(8));
+                let tag = crate::models::Tag::new(&id, &name);
+                self.create_tag(tag).await?;
+                tag_map.insert(name, id);
+                stats.tags_created += 1;
+            }
+        }
+
+        // 6. 更新交易记录
+        if !dry_run {
+            for old_tx in old_transactions {
+                let account_from_id = account_map.get(&old_tx.account_from)
+                    .cloned()
+                    .unwrap_or_default();
+                
+                let account_to_id = old_tx.account_to.as_ref()
+                    .and_then(|n| account_map.get(n).cloned());
+                
+                let category_id = category_map.get(&old_tx.category)
+                    .cloned()
+                    .unwrap_or_default();
+                
+                let tag_ids: Vec<String> = old_tx.tags.iter()
+                    .filter_map(|t| tag_map.get(t).cloned())
+                    .collect();
+
+                // 更新交易记录
+                let sql = "UPDATE transaction SET account_from_id = $account_from_id, account_to_id = $account_to_id, category_id = $category_id, tag_ids = $tag_ids WHERE id = $id";
+                self.db
+                    .query(sql)
+                    .bind(("account_from_id", account_from_id))
+                    .bind(("account_to_id", account_to_id))
+                    .bind(("category_id", category_id))
+                    .bind(("tag_ids", tag_ids))
+                    .bind(("id", old_tx.id))
+                    .await
+                    .map_err(FinanceError::Database)?;
+
+                stats.transactions_migrated += 1;
+            }
+        } else {
+            stats.transactions_migrated = old_transactions.len();
+        }
+
+        Ok(stats)
+    }
+
+    /// 获取使用旧字段的交易记录
+    async fn get_old_transactions(&self) -> Result<Vec<OldTransaction>> {
+        // 查找同时有旧字段account_from和新字段account_from_id为空的记录
+        let sql = r#"
+            SELECT id, account_from, account_to, category, tags 
+            FROM transaction 
+            WHERE account_from IS NOT NULL AND account_from_id IS NONE
+        "#;
+        
+        let mut result = self.db.query(sql).await.map_err(FinanceError::Database)?;
+        let transactions: Vec<OldTransaction> = result.take(0).map_err(FinanceError::Database)?;
+        Ok(transactions)
+    }
 }
 
 /// 月度统计
@@ -752,4 +976,23 @@ pub struct MonthlyStats {
     pub net: Decimal,
     pub transaction_count: usize,
     pub category_breakdown: std::collections::HashMap<String, Decimal>,
+}
+
+/// 数据迁移统计
+#[derive(Debug)]
+pub struct MigrationStats {
+    pub transactions_migrated: usize,
+    pub accounts_created: usize,
+    pub categories_created: usize,
+    pub tags_created: usize,
+}
+
+/// 旧格式交易记录（用于迁移）
+#[derive(Debug, serde::Deserialize)]
+struct OldTransaction {
+    pub id: surrealdb::RecordId,
+    pub account_from: String,
+    pub account_to: Option<String>,
+    pub category: String,
+    pub tags: Vec<String>,
 }

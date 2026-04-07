@@ -80,20 +80,34 @@ impl From<TxTypeArg> for TxType {
 pub async fn execute(db: &Database, args: AddArgs) -> Result<()> {
     let tx_type: TxType = args.tx_type.into();
 
-    // TODO: 批次2将添加账户/分类/标签的自动查找/创建
-    // 当前简化处理：直接使用用户输入作为ID
-    let account_from_id = format!("acc_{}", args.from);
-    let account_to_id = args.to.map(|t| format!("acc_{}", t));
-    let category_id = format!("cat_{}", args.category);
-    let tag_ids: Vec<String> = args.tag.into_iter().map(|t| format!("tag_{}", t)).collect();
+    // 查找或创建来源账户
+    let account_from = db.find_or_create_account_by_name(&args.from).await?;
+    
+    // 查找或创建去向账户（可选）
+    let account_to_id = if let Some(to_name) = args.to {
+        let account_to = db.find_or_create_account_by_name(&to_name).await?;
+        Some(account_to.id)
+    } else {
+        None
+    };
+    
+    // 查找或创建分类
+    let category = db.find_or_create_category_by_path(&args.category).await?;
+    
+    // 查找或创建标签
+    let mut tag_ids = Vec::new();
+    for tag_name in args.tag {
+        let tag = db.find_or_create_tag_by_name(&tag_name).await?;
+        tag_ids.push(tag.id);
+    }
 
     let transaction = Transaction::new(
         args.amount,
         args.currency,
         tx_type,
-        account_from_id,
+        account_from.id,
         account_to_id,
-        category_id,
+        category.id,
         args.description,
     )
     .with_tag_ids(tag_ids);
