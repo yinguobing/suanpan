@@ -4,11 +4,13 @@ pub mod add;
 pub mod delete;
 pub mod list;
 pub mod stats;
+pub mod update;
 
 use add::AddArgs;
 use delete::DeleteArgs;
 use list::ListArgs;
 use stats::StatsArgs;
+use update::UpdateArgs;
 
 /// 国冰财务管理系统 CLI
 #[derive(Parser)]
@@ -30,4 +32,6 @@ pub enum Commands {
     List(ListArgs),
     /// 统计报表
     Stats(StatsArgs),
+    /// 更新交易记录
+    Update(UpdateArgs),
 }

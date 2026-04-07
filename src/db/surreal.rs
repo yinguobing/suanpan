@@ -9,7 +9,20 @@ use surrealdb::Surreal;
 use std::path::Path;
 
 use crate::error::{FinanceError, Result};
-use crate::models::Transaction;
+use crate::models::{Transaction, TxType};
+
+/// 交易记录更新参数（部分更新）
+#[derive(Debug, Default)]
+pub struct TransactionUpdate {
+    pub amount: Option<Decimal>,
+    pub currency: Option<String>,
+    pub tx_type: Option<TxType>,
+    pub account_from: Option<String>,
+    pub account_to: Option<Option<String>>,
+    pub category: Option<String>,
+    pub description: Option<Option<String>>,
+    pub tags: Option<Vec<String>>,
+}
 
 /// 数据库封装
 #[derive(Debug)]
@@ -253,6 +266,66 @@ impl Database {
             results.push((id.clone(), success));
         }
         Ok(results)
+    }
+
+    /// 根据短 ID 更新交易记录
+    pub async fn update_by_short_id(
+        &self,
+        short_id: &str,
+        updates: TransactionUpdate,
+    ) -> Result<Option<Transaction>> {
+        // 查找记录
+        let (id, _) = match self.find_by_short_id(short_id).await? {
+            Some(result) => result,
+            None => return Ok(None),
+        };
+
+        // 构建更新内容对象
+        #[derive(Serialize)]
+        struct UpdateData {
+            #[serde(skip_serializing_if = "Option::is_none")]
+            amount: Option<Decimal>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            currency: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            tx_type: Option<TxType>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            account_from: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            account_to: Option<Option<String>>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            category: Option<String>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            description: Option<Option<String>>,
+            #[serde(skip_serializing_if = "Option::is_none")]
+            tags: Option<Vec<String>>,
+            updated_at: Datetime,
+        }
+
+        let update_data = UpdateData {
+            amount: updates.amount,
+            currency: updates.currency,
+            tx_type: updates.tx_type,
+            account_from: updates.account_from,
+            account_to: updates.account_to,
+            category: updates.category,
+            description: updates.description,
+            tags: updates.tags,
+            updated_at: Datetime::from(Utc::now()),
+        };
+
+        // 使用 MERGE 进行部分更新
+        let sql = format!("UPDATE {} MERGE $data", id.to_string());
+        
+        let mut result = self
+            .db
+            .query(&sql)
+            .bind(("data", update_data))
+            .await
+            .map_err(FinanceError::Database)?;
+
+        let updated: Option<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+        Ok(updated)
     }
 }
 
