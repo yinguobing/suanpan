@@ -84,7 +84,9 @@ finance-cli/
 │   │   ├── update.rs
 │   │   ├── list.rs
 │   │   ├── stats.rs
-│   │   └── category.rs      # 分类管理
+│   │   ├── account.rs       # 账户管理
+│   │   ├── category.rs      # 分类管理
+│   │   └── tag.rs           # 标签管理
 │   └── error.rs             # 错误处理
 └── migrations/
     └── init.surql           # 数据库初始化
@@ -120,15 +122,15 @@ struct Transaction {
     currency: String,              // 货币代码：CNY, USD...
     tx_type: TxType,               // 交易类型
     
-    // 复式记账核心
-    account_from: String,          // 来源账户
-    account_to: Option<String>,    // 去向账户/商户/收入方
+    // 复式记账核心（存账户ID而非名称）
+    account_from_id: String,       // 来源账户ID（外键，关联 account 表）
+    account_to_id: Option<String>, // 去向账户ID（外键，关联 account 表）
     
     category_id: String,           // 分类ID（外键，关联 category 表）
     description: Option<String>,   // 原始自然语言或备注
     
-    // 扩展字段
-    tags: Vec<String>,             // 标签（自由输入）
+    // 扩展字段（存标签ID而非名称）
+    tag_ids: Vec<String>,          // 标签ID列表（外键，关联 tag 表）
     metadata: Option<Value>,       // 任意扩展数据（JSON）
     
     // 系统字段
@@ -137,12 +139,39 @@ struct Transaction {
     source: TxSource,              // 数据来源
 }
 
+/// 账户
+struct Account {
+    id: String,                    // 永久唯一ID（如 "acc_xxx"）
+    name: String,                  // 显示名称（可修改）
+    account_type: AccountType,     // 账户类型
+    parent_id: Option<String>,     // 父账户ID（用于子账户，如信用卡下挂副卡）
+    created_at: DateTime<Local>,   // 创建时间
+}
+
+/// 账户类型
+enum AccountType {
+    BankCard,      // 银行卡
+    EWallet,       // 电子钱包（支付宝、微信）
+    Cash,          // 现金
+    Investment,    // 投资理财
+    Credit,        // 信用卡
+    Other,         // 其他
+}
+
 /// 分类（支持层级）
 struct Category {
     id: String,                    // 永久唯一ID（如 "cat_xxx"）
     name: String,                  // 显示名称（可修改）
     parent_id: Option<String>,     // 父分类ID（None 表示根分类）
     full_path: String,             // 预计算完整路径（如 "餐饮/午餐"）
+    created_at: DateTime<Local>,   // 创建时间
+}
+
+/// 标签
+struct Tag {
+    id: String,                    // 永久唯一ID（如 "tag_xxx"）
+    name: String,                  // 显示名称（可修改）
+    color: Option<String>,         // 显示颜色（可选）
     created_at: DateTime<Local>,   // 创建时间
 }
 ```
@@ -154,10 +183,30 @@ struct Category {
 - 避免浮点数精度问题
 - 支持多币种（日元无小数、科威特第纳尔 3 位小数）
 
-#### 账户设计（阶段一简化版）
-- `account_from` 和 `account_to` 使用 `String`
-- 不进行严格的外键约束
-- 阶段二再考虑账户管理和命名规范化
+#### 账户设计（ID 与名称解耦）
+- **独立账户表**：`account` 表存储 ID、名称、账户类型
+- **Transaction 存 ID**：`account_from_id`/`account_to_id` 字段存储永久 ID
+- **名称可改**：修改账户名称只需更新 `account` 表，不影响历史流水
+- **支持子账户**：通过 `parent_id` 实现（如"招行卡"下挂"招招理财"）
+
+**账户设计示例：**
+```
+account 表:
+┌─────────────┬──────────┬─────────────┬────────────┐
+│ id          │ name     │ account_type│ parent_id  │
+├─────────────┼──────────┼─────────────┼────────────┤
+│ acc_alipay  │ 支付宝   │ EWallet     │ null       │
+│ acc_cmb     │ 招行卡   │ BankCard    │ null       │
+│ acc_cmb_li  │ 招招理财 │ Investment  │ acc_cmb    │ ← 子账户
+└─────────────┴──────────┴─────────────┴────────────┘
+
+修改名称后（把"支付宝"改为"Alipay"）:
+├─────────────┼──────────┼─────────────┼────────────┤
+│ acc_alipay  │ Alipay   │ EWallet     │ null       │
+└─────────────┴──────────┴─────────────┴────────────┘
+
+所有 Transaction.account_from_id 仍为 "acc_alipay"，无需修改
+```
 
 #### 分类设计（ID 与名称解耦）
 - **独立分类表**：`category` 表存储 ID、名称、父子关系
@@ -185,6 +234,31 @@ category 表:
 └─────────────┴──────────┴────────────┴─────────────────┘
 
 所有 Transaction.category_id 仍为 "cat_food"，无需修改
+```
+
+#### 标签设计（ID 与名称解耦）
+- **独立标签表**：`tag` 表存储 ID、名称、颜色
+- **Transaction 存 ID**：`tag_ids` 字段存储标签 ID 列表
+- **名称可改**：修改标签名称只需更新 `tag` 表，不影响历史流水
+- **颜色支持**：可为标签指定显示颜色，便于可视化
+
+**标签设计示例：**
+```
+tag 表:
+┌──────────────┬──────────┬────────┐
+│ id           │ name     │ color  │
+├──────────────┼──────────┼────────┤
+│ tag_q1       │ 2026-Q1  │ #FF0000│
+│ tag_trip     │ 旅游     │ #00FF00│
+│ tag_family   │ 家人     │ #0000FF│
+└──────────────┴──────────┴────────┘
+
+修改名称后（把"2026-Q1"改为"第一季度"）:
+├──────────────┼──────────┼────────┤
+│ tag_q1       │ 第一季度 │ #FF0000│
+└──────────────┴──────────┴────────┘
+
+所有 Transaction.tag_ids 仍包含 "tag_q1"，无需修改
 ```
 
 #### 分类、标签、元数据三层设计
@@ -274,6 +348,37 @@ finance stats --month 2025-04
 
 # 按分类统计（支持层级汇总）
 finance stats --by-category
+
+# ========== 账户管理命令 ==========
+
+# 列出所有账户
+finance account list
+
+# 添加账户
+finance account add "支付宝" --type EWallet
+
+# 添加子账户（如信用卡副卡、理财子账户）
+finance account add "招招理财" --type Investment --parent "招行卡"
+
+# 重命名账户
+finance account rename "支付宝" "Alipay"
+
+# 删除账户（需确保无流水关联）
+finance account delete "支付宝"
+
+# ========== 标签管理命令 ==========
+
+# 列出所有标签
+finance tag list
+
+# 添加标签
+finance tag add "2026-Q1" --color "#FF0000"
+
+# 重命名标签
+finance tag rename "2026-Q1" "第一季度"
+
+# 删除标签（会自动从所有流水移除关联）
+finance tag delete "2026-Q1"
 
 # ========== 分类管理命令 ==========
 
