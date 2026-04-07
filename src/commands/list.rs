@@ -7,15 +7,12 @@ use crate::error::Result;
 
 /// 将 SurrealDB Datetime 格式化为本地时间字符串
 fn format_datetime(dt: &surrealdb::Datetime) -> String {
-    // SurrealDB Datetime 内部就是 chrono::DateTime<Utc>
-    // 使用 to_string 然后解析，或者直接访问内部
-    let s = dt.to_string();
-    // 尝试解析 ISO 8601 格式
-    if let Ok(utc_dt) = chrono::DateTime::parse_from_rfc3339(&s) {
-        let local_dt: chrono::DateTime<Local> = utc_dt.into();
-        return local_dt.format("%m-%d %H:%M").to_string();
-    }
-    s
+    // SurrealDB Datetime 内部是 chrono::DateTime<Utc>
+    // 使用 into_inner 获取内部的 sql::Datetime，再转为 DateTime<Utc>
+    let sql_dt: surrealdb::sql::Datetime = dt.to_owned().into_inner();
+    let utc_dt: chrono::DateTime<chrono::Utc> = sql_dt.into();
+    let local_dt: chrono::DateTime<Local> = utc_dt.into();
+    local_dt.format("%m-%d %H:%M").to_string()
 }
 
 /// 列出交易记录
