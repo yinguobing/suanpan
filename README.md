@@ -1,6 +1,8 @@
 # 国冰财务管理系统 (finance-cli)
 
-个人财务管理 CLI 工具，基于 Rust + SurrealDB 构建，支持本地数据存储和多种交易类型管理。
+智能体时代的个人财务管理CLI工具，基于Rust + SurrealDB构建，支持本地数据存储和多种交易类型管理。
+
+将此页面发给你的智能体，让它协助你管理自己的财务。
 
 ## 特性
 
@@ -17,14 +19,14 @@
 
 ```bash
 # 克隆仓库
-git clone <repository-url>
+git clone https://github.com/yinguobing/finance-cli.git
 cd finance-cli
 
 # 编译发布版本
 cargo build --release
 
 # 将二进制文件添加到 PATH
-sudo cp target/release/finance-cli /usr/local/bin/finance
+sudo cp target/release/finance /usr/local/bin/finance
 ```
 
 ### 依赖
@@ -193,21 +195,20 @@ cp ~/finance-backup-20260406.db ~/.local/share/finance-cli/data.db
 
 ## 开发计划
 
-### 阶段一：MVP（当前）
-- ✅ 基础记账（add/list/stats）
-- ✅ 多交易类型支持
+### 阶段一：MVP
+- ✅ 基础记账
+- ✅ 交易账户
+- ✅ 交易分类
+- ✅ 交易标签
 - ✅ 本地数据持久化
-- ✅ 月度统计报表
+- ✅ 基本统计：月度统计报表
 
 ### 阶段二：数据整合
-- ⬜ 银行/支付宝/微信 CSV 导入
+- ⬜ 第三方数据CSV导入
 - ⬜ 数据清洗和去重
-- ⬜ 账户管理和余额追踪
 
-### 阶段三：智能分析
-- ⬜ 自然语言解析（AI 助手）
-- ⬜ 预算设置与提醒
-- ⬜ 财务健康度评分
+### 阶段三：数据分析
+- ⬜ 高级数据统计
 - ⬜ 数据可视化
 
 ## 技术栈
