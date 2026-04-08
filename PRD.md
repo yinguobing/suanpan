@@ -356,12 +356,12 @@ finance stats --by-category
 # 列出所有账户
 finance account list
 
-# 添加账户
-finance account add <ID> <名称> [--type <类型>]
-finance account add acc_alipay "支付宝" --type EWallet
+# 添加账户（ID 自动生成）
+finance account add <名称> -a <类型>
+finance account add "支付宝" -a e-wallet
 
 # 添加子账户（如信用卡副卡、理财子账户）
-finance account add acc_cmb_li "招招理财" --type Investment --parent acc_cmb
+finance account add "招招理财" -a investment --parent acc_cmb
 
 # 重命名账户
 finance account rename <ID> <新名称>
@@ -375,9 +375,9 @@ finance account remove <ID>
 # 列出所有标签
 finance tag list
 
-# 添加标签
-finance tag add <ID> <名称> [--color <颜色>]
-finance tag add tag_q1 "2026-Q1" --color "#FF0000"
+# 添加标签（ID 自动生成）
+finance tag add <名称> [--color <颜色>]
+finance tag add "2026-Q1" --color "#FF0000"
 
 # 重命名标签
 finance tag rename <ID或名称> <新名称>
@@ -391,7 +391,7 @@ finance tag remove <ID或名称>
 # 查看分类树
 finance category tree
 
-# 添加分类（指定完整路径）
+# 添加分类（指定完整路径，各级分类自动创建）
 finance category add <路径>
 finance category add "餐饮/午餐/食堂"
 
@@ -408,7 +408,7 @@ finance category remove "餐饮/午餐"
 
 ```
 +------------+------+--------+------+--------+--------+------+----------+------------+
-| 时间       | 类型 | 金额   | 货币 | 账户   | 去向   | 分类 | 描述     | ID         |
+| 时间       | 类型  | 金额   | 货币 | 账户   | 去向   | 分类 | 备注     | ID         |
 +============+======+========+======+========+========+======+==========+============+
 | 2026-04-07 | 支出 | 35     | CNY  | 支付宝 | 食堂   | 餐饮 | 午餐     | f4sp877fxbwc |
 | 10:07:51   |      |        |      |        |        |      |          |              |
