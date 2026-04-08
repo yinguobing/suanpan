@@ -648,6 +648,25 @@ impl Database {
         Ok(())
     }
 
+    /// 统计引用某分类的交易记录数量
+    pub async fn count_transactions_by_category(&self, category_id: &str) -> Result<usize> {
+        let sql = "SELECT count() FROM transaction WHERE category_id = $category_id GROUP BY count";
+        let mut result = self
+            .db
+            .query(sql)
+            .bind(("category_id", category_id.to_string()))
+            .await
+            .map_err(FinanceError::Database)?;
+
+        #[derive(Debug, Deserialize)]
+        struct CountResult {
+            count: usize,
+        }
+
+        let counts: Vec<CountResult> = result.take(0).map_err(FinanceError::Database)?;
+        Ok(counts.first().map(|c| c.count).unwrap_or(0))
+    }
+
     /// 删除分类（递归删除子分类）
     pub async fn delete_category(&self, id: &str) -> Result<bool> {
         // 使用栈实现非递归删除

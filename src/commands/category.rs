@@ -227,7 +227,13 @@ async fn delete_category(db: &Database, args: CategoryDeleteArgs) -> Result<()> 
         println!("⚠️  该分类有 {} 个子分类，将一并删除", children.len());
     }
 
-    // TODO: 检查是否有关联的交易记录
+    // 检查是否有关联的交易记录
+    let tx_count = db.count_transactions_by_category(&category.id).await?;
+    if tx_count > 0 {
+        println!("❌ 无法删除：该分类被 {} 条交易记录引用", tx_count);
+        println!("   请先删除或修改相关交易记录后再试");
+        return Ok(());
+    }
 
     let deleted = db.delete_category(&category.id).await?;
     if deleted {
