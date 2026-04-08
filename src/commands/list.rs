@@ -52,6 +52,10 @@ pub struct ListArgs {
     /// 按类型筛选
     #[arg(short, long)]
     pub tx_type: Option<String>,
+
+    /// 显示 ID 而非名称
+    #[arg(long)]
+    pub show_ids: bool,
 }
 
 pub async fn execute(db: &Database, args: ListArgs) -> Result<()> {
@@ -72,9 +76,22 @@ pub async fn execute(db: &Database, args: ListArgs) -> Result<()> {
         return Ok(());
     }
 
+    // 构建账户和分类的名称映射
+    let accounts = db.list_accounts().await?;
+    let account_map: std::collections::HashMap<_, _> = accounts
+        .into_iter()
+        .map(|a| (a.id, a.name))
+        .collect();
+    
+    let categories = db.list_categories().await?;
+    let category_map: std::collections::HashMap<_, _> = categories
+        .into_iter()
+        .map(|c| (c.id, c.name))
+        .collect();
+
     let mut table = Table::new();
     table.set_header(vec![
-        "时间", "类型", "金额", "货币", "账户", "去向", "分类", "描述", "ID",
+        "时间", "类型", "金额", "货币", "账户", "去向", "分类", "备注", "ID",
     ]);
 
     for tx in transactions.iter().take(args.limit) {
@@ -82,10 +99,34 @@ pub async fn execute(db: &Database, args: ListArgs) -> Result<()> {
         let tx_type = format!("{}", tx.tx_type);
         let amount = tx.amount.to_string();
         let currency = &tx.currency;
-        // TODO: 批次2将添加ID到名称的查询
-        let account_from = &tx.account_from_id;
-        let account_to = tx.account_to_id.as_deref().unwrap_or("-");
-        let category = &tx.category_id;
+        
+        // 根据 --show-ids 参数决定显示名称还是 ID
+        let account_from = if args.show_ids {
+            tx.account_from_id.clone()
+        } else {
+            account_map
+                .get(&tx.account_from_id)
+                .cloned()
+                .unwrap_or_else(|| tx.account_from_id.clone())
+        };
+        
+        let account_to = tx.account_to_id.as_deref().map(|id| {
+            if args.show_ids {
+                id.to_string()
+            } else {
+                account_map.get(id).cloned().unwrap_or_else(|| id.to_string())
+            }
+        });
+        
+        let category = if args.show_ids {
+            tx.category_id.clone()
+        } else {
+            category_map
+                .get(&tx.category_id)
+                .cloned()
+                .unwrap_or_else(|| tx.category_id.clone())
+        };
+        
         let description = tx.description.as_deref().unwrap_or("-");
         let short_id = format_short_id(&tx.id);
 
@@ -94,9 +135,9 @@ pub async fn execute(db: &Database, args: ListArgs) -> Result<()> {
             &tx_type,
             &amount,
             currency,
-            account_from,
-            account_to,
-            category,
+            &account_from,
+            account_to.as_deref().unwrap_or("-"),
+            &category,
             description,
             &short_id,
         ]);
