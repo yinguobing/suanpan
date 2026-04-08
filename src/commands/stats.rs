@@ -16,6 +16,10 @@ pub struct StatsArgs {
     /// 按分类统计
     #[arg(long)]
     pub by_category: bool,
+
+    /// 显示分类 ID 而非名称
+    #[arg(long)]
+    pub show_ids: bool,
 }
 
 pub async fn execute(db: &Database, args: StatsArgs) -> Result<()> {
@@ -48,16 +52,19 @@ pub async fn execute(db: &Database, args: StatsArgs) -> Result<()> {
         cat_table.set_header(vec!["分类", "金额", "占比"]);
 
         let mut categories: Vec<_> = stats.category_breakdown.iter().collect();
-        categories.sort_by(|a, b| b.1.cmp(a.1));
+        // 按金额降序排序
+        categories.sort_by(|a, b| b.1.1.cmp(&a.1.1));
 
-        for (category, amount) in categories {
+        for (category_id, (category_name, amount)) in categories {
             let percentage = if stats.total_expense > Decimal::ZERO {
                 (*amount / stats.total_expense * Decimal::from(100)).round_dp(1)
             } else {
                 Decimal::ZERO
             };
+            // 根据 --show-ids 参数决定显示 ID 还是名称
+            let display_name = if args.show_ids { category_id } else { category_name };
             cat_table.add_row(vec![
-                category,
+                display_name,
                 &format!("¥{}", amount),
                 &format!("{}%", percentage),
             ]);

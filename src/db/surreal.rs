@@ -1,5 +1,4 @@
 use chrono::{DateTime, NaiveDate, Utc};
-use rust_decimal::prelude::Zero;
 use surrealdb::Datetime;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -231,18 +230,29 @@ impl Database {
 
         let mut total_income = Decimal::ZERO;
         let mut total_expense = Decimal::ZERO;
-        let mut category_breakdown: std::collections::HashMap<String, Decimal> =
+        let mut category_breakdown: std::collections::HashMap<String, (String, Decimal)> =
             std::collections::HashMap::new();
+
+        // 查询所有分类以获取名称映射
+        let categories = self.list_categories().await?;
+        let category_name_map: std::collections::HashMap<String, String> = categories
+            .into_iter()
+            .map(|c| (c.id, c.name))
+            .collect();
 
         for tx in &transactions {
             match tx.tx_type {
                 crate::models::TxType::Income => total_income += tx.amount,
                 crate::models::TxType::Expense => {
                     total_expense += tx.amount;
-                    // TODO: 批次2将添加根据category_id查询category.name
-                    *category_breakdown
+                    let category_name = category_name_map
+                        .get(&tx.category_id)
+                        .cloned()
+                        .unwrap_or_else(|| tx.category_id.clone());
+                    let entry = category_breakdown
                         .entry(tx.category_id.clone())
-                        .or_insert_with(Decimal::zero) += tx.amount;
+                        .or_insert_with(|| (category_name.clone(), Decimal::ZERO));
+                    entry.1 += tx.amount;
                 }
                 _ => {}
             }
@@ -1055,7 +1065,8 @@ pub struct MonthlyStats {
     pub total_expense: Decimal,
     pub net: Decimal,
     pub transaction_count: usize,
-    pub category_breakdown: std::collections::HashMap<String, Decimal>,
+    /// (分类名称, 金额) 的列表，保留 ID 作为 key 用于 --show-ids 参数
+    pub category_breakdown: std::collections::HashMap<String, (String, Decimal)>,
 }
 
 /// 数据迁移统计
