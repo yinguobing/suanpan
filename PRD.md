@@ -29,7 +29,7 @@
 
 **功能范围：**
 - ✅ 结构化参数录入（CLI 参数）
-- ✅ 流水记录存储、查询、删除、更新
+- ✅ 流水记录存储、查询、移除、更新
 - ✅ 基础统计（月度汇总、分类占比）
 - ✅ CLI 界面
 
@@ -74,22 +74,25 @@ finance-cli/
 │   ├── models/              # 数据模型
 │   │   ├── mod.rs
 │   │   ├── transaction.rs   # 交易记录
+│   │   ├── account.rs       # 账户
+│   │   ├── category.rs      # 分类
+│   │   ├── tag.rs           # 标签
 │   │   └── types.rs         # 枚举类型
 │   ├── db/                  # 数据库层
+│   │   ├── mod.rs
 │   │   └── surreal.rs       # SurrealDB 封装
 │   ├── commands/            # CLI 子命令
 │   │   ├── mod.rs
 │   │   ├── add.rs
-│   │   ├── delete.rs
+│   │   ├── remove.rs        # 移除交易
 │   │   ├── update.rs
 │   │   ├── list.rs
 │   │   ├── stats.rs
+│   │   ├── migrate.rs       # 数据迁移
 │   │   ├── account.rs       # 账户管理
 │   │   ├── category.rs      # 分类管理
 │   │   └── tag.rs           # 标签管理
 │   └── error.rs             # 错误处理
-└── migrations/
-    └── init.surql           # 数据库初始化
 ```
 
 ---
@@ -116,8 +119,8 @@ enum TxSource {
 
 /// 交易记录
 struct Transaction {
-    id: Uuid,                      // 全局唯一标识
-    timestamp: DateTime<Local>,    // 交易发生时间
+    id: Option<RecordId>,          // 全局唯一标识（数据库自动生成）
+    timestamp: Datetime,           // 交易发生时间
     amount: Decimal,               // 金额（正数，Decimal 精度）
     currency: String,              // 货币代码：CNY, USD...
     tx_type: TxType,               // 交易类型
@@ -127,15 +130,15 @@ struct Transaction {
     account_to_id: Option<String>, // 去向账户ID（外键，关联 account 表）
     
     category_id: String,           // 分类ID（外键，关联 category 表）
-    description: Option<String>,   // 原始自然语言或备注
+    description: Option<String>,   // 备注描述
     
     // 扩展字段（存标签ID而非名称）
     tag_ids: Vec<String>,          // 标签ID列表（外键，关联 tag 表）
     metadata: Option<Value>,       // 任意扩展数据（JSON）
     
     // 系统字段
-    created_at: DateTime<Local>,   // 记录创建时间
-    updated_at: Option<DateTime<Local>>, // 修改时间
+    created_at: Datetime,          // 记录创建时间
+    updated_at: Option<Datetime>,  // 修改时间
     source: TxSource,              // 数据来源
 }
 
@@ -145,7 +148,7 @@ struct Account {
     name: String,                  // 显示名称（可修改）
     account_type: AccountType,     // 账户类型
     parent_id: Option<String>,     // 父账户ID（用于子账户，如信用卡下挂副卡）
-    created_at: DateTime<Local>,   // 创建时间
+    created_at: Datetime,          // 创建时间
 }
 
 /// 账户类型
@@ -164,7 +167,8 @@ struct Category {
     name: String,                  // 显示名称（可修改）
     parent_id: Option<String>,     // 父分类ID（None 表示根分类）
     full_path: String,             // 预计算完整路径（如 "餐饮/午餐"）
-    created_at: DateTime<Local>,   // 创建时间
+    level: u32,                    // 层级深度
+    created_at: Datetime,          // 创建时间
 }
 
 /// 标签
@@ -172,7 +176,7 @@ struct Tag {
     id: String,                    // 永久唯一ID（如 "tag_xxx"）
     name: String,                  // 显示名称（可修改）
     color: Option<String>,         // 显示颜色（可选）
-    created_at: DateTime<Local>,   // 创建时间
+    created_at: Datetime,          // 创建时间
 }
 ```
 
@@ -306,10 +310,10 @@ CLI 通过结构化参数接收交易信息，直接录入无需确认：
 
 ```bash
 # 添加一笔支出（分类使用路径格式）
-finance add -a 35 -f 支付宝 -o 食堂 -c "餐饮/午餐" -d "午餐"
+finance add -a 35 -f 支付宝 -t expense -c "餐饮/午餐" -d "午餐"
 
 # 添加一笔收入（分类使用路径格式）
-finance add -a 8500 -t income -f 公司 -o 招行卡 -c "收入/工资" -d "三月工资"
+finance add -a 8500 -t income -f 公司 -c "收入/工资" -d "三月工资"
 
 # 添加转账记录
 finance add -a 1000 -t transfer -f 招行卡 -o 支付宝 -c "转账"
@@ -317,9 +321,9 @@ finance add -a 1000 -t transfer -f 招行卡 -o 支付宝 -c "转账"
 
 参数说明：
 - `-a, --amount`: 金额（必填）
-- `-t, --tx-type`: 交易类型，默认为 expense
-- `-f, --from`: 来源账户（必填）
-- `-o, --to`: 去向账户/商户（可选）
+- `-t, --tx-type`: 交易类型，默认为 expense（可选值: expense, income, transfer, debtchange, creditchange）
+- `-f, --from`: 来源账户ID（必填）
+- `-o, --to`: 去向账户ID（可选，transfer/debtchange/creditchange 类型时建议填写）
 - `-c, --category`: 分类路径（如 "餐饮/午餐"），默认为"其他"
 - `-d, --description`: 描述/备注（可选）
 - `-y, --currency`: 货币，默认为 CNY
@@ -329,13 +333,11 @@ finance add -a 1000 -t transfer -f 招行卡 -o 支付宝 -c "转账"
 
 ```bash
 # 添加交易记录（结构化参数，分类使用路径）
-finance add -a 35 -f 支付宝 -o 食堂 -c "餐饮/午餐" -d "午餐"
+finance add -a 35 -f 支付宝 -t expense -c "餐饮/午餐" -d "午餐"
 
-# 删除交易记录（通过短 ID）
-finance delete f4sp877fxbwc
-
-# 批量删除多个记录
-finance delete f4sp877fxbwc abc123dexy78 xyz789gh1234
+# 移除交易记录（通过短 ID，支持批量）
+finance remove f4sp877fxbwc
+finance remove f4sp877fxbwc abc123dexy78 xyz789gh1234
 
 # 更新交易记录（通过短 ID，只更新指定字段）
 finance update f4sp877fxbwc -a 40 -d "午餐+饮料"
@@ -355,16 +357,18 @@ finance stats --by-category
 finance account list
 
 # 添加账户
-finance account add "支付宝" --type EWallet
+finance account add <ID> <名称> [--type <类型>]
+finance account add acc_alipay "支付宝" --type EWallet
 
 # 添加子账户（如信用卡副卡、理财子账户）
-finance account add "招招理财" --type Investment --parent "招行卡"
+finance account add acc_cmb_li "招招理财" --type Investment --parent acc_cmb
 
 # 重命名账户
-finance account rename "支付宝" "Alipay"
+finance account rename <ID> <新名称>
+finance account rename acc_alipay "Alipay"
 
-# 删除账户（需确保无流水关联）
-finance account delete "支付宝"
+# 移除账户（需确保无流水关联、无子账户）
+finance account remove <ID>
 
 # ========== 标签管理命令 ==========
 
@@ -372,27 +376,32 @@ finance account delete "支付宝"
 finance tag list
 
 # 添加标签
-finance tag add "2026-Q1" --color "#FF0000"
+finance tag add <ID> <名称> [--color <颜色>]
+finance tag add tag_q1 "2026-Q1" --color "#FF0000"
 
 # 重命名标签
-finance tag rename "2026-Q1" "第一季度"
+finance tag rename <ID或名称> <新名称>
+finance tag rename tag_q1 "第一季度"
 
-# 删除标签（会自动从所有流水移除关联）
-finance tag delete "2026-Q1"
+# 移除标签（会自动从所有流水移除关联）
+finance tag remove <ID或名称>
 
 # ========== 分类管理命令 ==========
 
 # 查看分类树
 finance category tree
 
-# 添加分类（指定父分类路径）
+# 添加分类（指定完整路径）
+finance category add <路径>
 finance category add "餐饮/午餐/食堂"
 
 # 重命名分类（自动级联更新子分类路径）
+finance category rename <路径或ID> <新名称>
 finance category rename "餐饮" "吃饭"
 
-# 删除分类（需确保无流水关联）
-finance category delete "餐饮/午餐"
+# 移除分类（需确保无流水关联）
+finance category remove <路径或ID>
+finance category remove "餐饮/午餐"
 ```
 
 **List 输出格式：**
@@ -410,7 +419,7 @@ finance category delete "餐饮/午餐"
 - **时间格式**：完整日期时间 `YYYY-MM-DD HH:MM:SS`
 - **ID 位置**：表格最后一列，便于复制使用
 - **短 ID**：显示 Record ID 的前 12 位（如 `f4sp877fxbwc`），平衡可读性与唯一性
-- **删除/更新**：使用短 ID 即可，命令内部使用完整 ID 匹配
+- **移除/更新**：使用短 ID 即可，命令内部使用完整 ID 匹配
 
 ---
 
@@ -424,6 +433,19 @@ finance category delete "餐饮/午餐"
 ### 7.2 SurrealDB 表结构
 
 ```surql
+-- 账户表
+DEFINE TABLE account SCHEMAFULL;
+
+DEFINE FIELD id ON account TYPE string;                     -- 永久ID（如 "acc_xxx"）
+DEFINE FIELD name ON account TYPE string;                   -- 显示名称
+DEFINE FIELD account_type ON account TYPE string;           -- 账户类型
+DEFINE FIELD parent_id ON account TYPE option<string>;      -- 父账户ID
+DEFINE FIELD created_at ON account TYPE datetime;           -- 创建时间
+
+-- 账户索引
+DEFINE INDEX idx_account_id ON account COLUMNS id UNIQUE;
+DEFINE INDEX idx_account_parent ON account COLUMNS parent_id;
+
 -- 分类表（支持层级）
 DEFINE TABLE category SCHEMAFULL;
 
@@ -431,12 +453,24 @@ DEFINE FIELD id ON category TYPE string;                    -- 永久ID（如 "c
 DEFINE FIELD name ON category TYPE string;                  -- 显示名称
 DEFINE FIELD parent_id ON category TYPE option<string>;     -- 父分类ID
 DEFINE FIELD full_path ON category TYPE string;             -- 预计算完整路径
+DEFINE FIELD level ON category TYPE int;                    -- 层级深度
 DEFINE FIELD created_at ON category TYPE datetime;          -- 创建时间
 
 -- 分类索引
 DEFINE INDEX idx_category_id ON category COLUMNS id UNIQUE;
 DEFINE INDEX idx_category_parent ON category COLUMNS parent_id;
 DEFINE INDEX idx_category_path ON category COLUMNS full_path;
+
+-- 标签表
+DEFINE TABLE tag SCHEMAFULL;
+
+DEFINE FIELD id ON tag TYPE string;                         -- 永久ID（如 "tag_xxx"）
+DEFINE FIELD name ON tag TYPE string;                       -- 显示名称
+DEFINE FIELD color ON tag TYPE option<string>;              -- 显示颜色
+DEFINE FIELD created_at ON tag TYPE datetime;               -- 创建时间
+
+-- 标签索引
+DEFINE INDEX idx_tag_id ON tag COLUMNS id UNIQUE;
 
 -- 交易记录表
 DEFINE TABLE transaction SCHEMAFULL;
@@ -445,22 +479,24 @@ DEFINE FIELD id ON transaction TYPE record;
 DEFINE FIELD timestamp ON transaction TYPE datetime;
 DEFINE FIELD amount ON transaction TYPE decimal;
 DEFINE FIELD currency ON transaction TYPE string;
-DEFINE FIELD tx_type ON transaction TYPE string;
-DEFINE FIELD account_from ON transaction TYPE string;
-DEFINE FIELD account_to ON transaction TYPE option<string>;
-DEFINE FIELD category_id ON transaction TYPE string;        -- 关联 category.id
+DEFINE FIELD tx_type ON transaction TYPE string;            -- expense/income/transfer/debtchange/creditchange
+DEFINE FIELD account_from_id ON transaction TYPE string;    -- 来源账户ID
+DEFINE FIELD account_to_id ON transaction TYPE option<string>; -- 去向账户ID
+DEFINE FIELD category_id ON transaction TYPE string;        -- 分类ID
 DEFINE FIELD description ON transaction TYPE option<string>;
-DEFINE FIELD tags ON transaction TYPE array<string>;
+DEFINE FIELD tag_ids ON transaction TYPE array<string>;     -- 标签ID列表
 DEFINE FIELD metadata ON transaction TYPE option<object>;
 DEFINE FIELD created_at ON transaction TYPE datetime;
 DEFINE FIELD updated_at ON transaction TYPE option<datetime>;
-DEFINE FIELD source ON transaction TYPE string;
+DEFINE FIELD source ON transaction TYPE string;             -- manual/csv_import
 
 -- 索引
 DEFINE INDEX idx_timestamp ON transaction COLUMNS timestamp;
-DEFINE INDEX idx_tx_category ON transaction COLUMNS category_id;  -- 外键索引
-DEFINE INDEX idx_account_from ON transaction COLUMNS account_from;
+DEFINE INDEX idx_tx_category ON transaction COLUMNS category_id;
+DEFINE INDEX idx_account_from ON transaction COLUMNS account_from_id;
+DEFINE INDEX idx_account_to ON transaction COLUMNS account_to_id;
 DEFINE INDEX idx_tx_type ON transaction COLUMNS tx_type;
+DEFINE INDEX idx_tag_ids ON transaction COLUMNS tag_ids;
 ```
 
 ---
