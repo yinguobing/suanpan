@@ -24,3 +24,7 @@ tree-ds = { version = "0.1", features = ["serde"] }
 
 [dev-dependencies]
 rust_decimal_macros = "1.36"
+
+[[bin]]
+name = "finance"
+path = "src/main.rs"
