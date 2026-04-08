@@ -146,9 +146,6 @@ async fn delete_tag(db: &Database, args: TagDeleteArgs) -> Result<()> {
         return Ok(());
     };
 
-    // TODO: 从所有Transaction中移除该标签ID
-    // 这需要先查询所有包含该标签的交易，然后更新它们
-
     let deleted = db.delete_tag(&tag.id).await?;
     if deleted {
         println!("✅ 标签已删除: {} ({})", tag.name, tag.id);

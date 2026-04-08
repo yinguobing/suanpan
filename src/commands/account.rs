@@ -182,7 +182,13 @@ async fn delete_account(db: &Database, args: AccountDeleteArgs) -> Result<()> {
         return Ok(());
     }
 
-    // TODO: 检查是否有关联的交易记录
+    // 检查是否有关联的交易记录
+    let tx_count = db.count_transactions_by_account(&args.id).await?;
+    if tx_count > 0 {
+        println!("❌ 无法删除：该账户被 {} 条交易记录引用", tx_count);
+        println!("   请先删除或修改相关交易记录后再试");
+        return Ok(());
+    }
 
     let deleted = db.delete_account(&args.id).await?;
     if deleted {

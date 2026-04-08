@@ -667,6 +667,58 @@ impl Database {
         Ok(counts.first().map(|c| c.count).unwrap_or(0))
     }
 
+    /// 统计引用某账户的交易记录数量
+    pub async fn count_transactions_by_account(&self, account_id: &str) -> Result<usize> {
+        let sql = "SELECT count() FROM transaction WHERE account_from_id = $account_id OR account_to_id = $account_id GROUP BY count";
+        let mut result = self
+            .db
+            .query(sql)
+            .bind(("account_id", account_id.to_string()))
+            .await
+            .map_err(FinanceError::Database)?;
+
+        #[derive(Debug, Deserialize)]
+        struct CountResult {
+            count: usize,
+        }
+
+        let counts: Vec<CountResult> = result.take(0).map_err(FinanceError::Database)?;
+        Ok(counts.first().map(|c| c.count).unwrap_or(0))
+    }
+
+    /// 统计引用某标签的交易记录数量
+    pub async fn count_transactions_by_tag(&self, tag_id: &str) -> Result<usize> {
+        let sql = "SELECT count() FROM transaction WHERE tag_ids CONTAINS $tag_id GROUP BY count";
+        let mut result = self
+            .db
+            .query(sql)
+            .bind(("tag_id", tag_id.to_string()))
+            .await
+            .map_err(FinanceError::Database)?;
+
+        #[derive(Debug, Deserialize)]
+        struct CountResult {
+            count: usize,
+        }
+
+        let counts: Vec<CountResult> = result.take(0).map_err(FinanceError::Database)?;
+        Ok(counts.first().map(|c| c.count).unwrap_or(0))
+    }
+
+    /// 从所有交易记录中移除指定标签
+    pub async fn remove_tag_from_transactions(&self, tag_id: &str) -> Result<usize> {
+        let sql = "UPDATE transaction SET tag_ids = array::difference(tag_ids, [$tag_id]) WHERE tag_ids CONTAINS $tag_id";
+        let mut result = self
+            .db
+            .query(sql)
+            .bind(("tag_id", tag_id.to_string()))
+            .await
+            .map_err(FinanceError::Database)?;
+        // SurrealDB UPDATE 返回受影响的记录数
+        let affected: Vec<serde_json::Value> = result.take(0).map_err(FinanceError::Database)?;
+        Ok(affected.len())
+    }
+
     /// 删除分类（递归删除子分类）
     pub async fn delete_category(&self, id: &str) -> Result<bool> {
         // 使用栈实现非递归删除
@@ -782,9 +834,11 @@ impl Database {
         Ok(updated)
     }
 
-    /// 删除标签
+    /// 删除标签（会自动从所有交易记录中移除关联）
     pub async fn delete_tag(&self, id: &str) -> Result<bool> {
-        // TODO: 从所有Transaction中移除该标签ID
+        // 先从所有交易记录中移除该标签ID
+        let _removed = self.remove_tag_from_transactions(id).await?;
+        
         let sql = "DELETE FROM tag WHERE id = type::thing('tag', $id)";
         let mut result = self
             .db
