@@ -7,6 +7,8 @@ use crate::models::{CategoryRecord, category_utils};
 /// 分类管理子命令
 #[derive(Subcommand)]
 pub enum CategoryCommands {
+    /// 列出所有分类
+    List(ListArgs),
     /// 查看分类树
     Tree(TreeArgs),
     /// 添加分类
@@ -15,6 +17,14 @@ pub enum CategoryCommands {
     Rename(CategoryRenameArgs),
     /// 删除分类
     Delete(CategoryDeleteArgs),
+}
+
+/// 列出分类参数
+#[derive(Args)]
+pub struct ListArgs {
+    /// 显示 ID 而非名称
+    #[arg(long)]
+    pub show_ids: bool,
 }
 
 /// 查看分类树参数
@@ -50,11 +60,49 @@ pub struct CategoryDeleteArgs {
 
 pub async fn execute(db: &Database, command: CategoryCommands) -> Result<()> {
     match command {
+        CategoryCommands::List(args) => list_categories(db, args).await,
         CategoryCommands::Tree(args) => show_tree(db, args).await,
         CategoryCommands::Add(args) => add_category(db, args).await,
         CategoryCommands::Rename(args) => rename_category(db, args).await,
         CategoryCommands::Delete(args) => delete_category(db, args).await,
     }
+}
+
+async fn list_categories(db: &Database, args: ListArgs) -> Result<()> {
+    let categories = db.list_categories().await?;
+
+    if categories.is_empty() {
+        println!("暂无分类");
+        return Ok(());
+    }
+
+    println!("\n📂 分类列表\n");
+    println!("{:<20} {:<8} {:<20} {}", "ID", "层级", "父分类", "完整路径");
+    println!("{}", "-".repeat(80));
+
+    // 按完整路径排序
+    let mut sorted: Vec<&CategoryRecord> = categories.iter().collect();
+    sorted.sort_by(|a, b| a.full_path.cmp(&b.full_path));
+
+    for cat in sorted {
+        let parent = cat.parent_id.as_deref().unwrap_or("-");
+        let level = cat.level.to_string();
+        
+        if args.show_ids {
+            println!(
+                "{:<20} {:<8} {:<20} {}",
+                cat.id, level, parent, cat.full_path
+            );
+        } else {
+            println!(
+                "{:<20} {:<8} {:<20} {}",
+                cat.id, level, parent, cat.full_path
+            );
+        }
+    }
+    println!();
+
+    Ok(())
 }
 
 async fn show_tree(db: &Database, args: TreeArgs) -> Result<()> {
