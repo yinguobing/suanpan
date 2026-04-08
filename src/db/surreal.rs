@@ -9,7 +9,7 @@ use surrealdb::Surreal;
 use std::path::Path;
 
 use crate::error::{FinanceError, Result};
-use crate::models::{Account, Category, Tag, Transaction, TxType};
+use crate::models::{Account, CategoryRecord, Tag, Transaction, TxType};
 
 /// 生成带前缀的唯一ID
 fn generate_id(prefix: &str) -> String {
@@ -491,7 +491,7 @@ impl Database {
     // ==================== 分类管理方法 ====================
 
     /// 创建分类
-    pub async fn create_category(&self, category: Category) -> Result<Category> {
+    pub async fn create_category(&self, category: CategoryRecord) -> Result<CategoryRecord> {
         let id = category.id.clone();
         let sql = r#"CREATE type::thing("category", $id) CONTENT { name: $name, parent_id: $parent_id, full_path: $full_path, level: $level, created_at: time::now() }"#;
         self.db
@@ -508,7 +508,7 @@ impl Database {
     }
 
     /// 根据ID获取分类
-    pub async fn get_category(&self, id: &str) -> Result<Option<Category>> {
+    pub async fn get_category(&self, id: &str) -> Result<Option<CategoryRecord>> {
         let sql = "SELECT string::split(<string> id, ':')[1] as id, name, parent_id, full_path, level, created_at FROM category WHERE id = type::thing('category', $id)";
         let mut result = self
             .db
@@ -516,12 +516,12 @@ impl Database {
             .bind(("id", id.to_string()))
             .await
             .map_err(FinanceError::Database)?;
-        let category: Option<Category> = result.take(0).map_err(FinanceError::Database)?;
+        let category: Option<CategoryRecord> = result.take(0).map_err(FinanceError::Database)?;
         Ok(category)
     }
 
     /// 根据完整路径获取分类
-    pub async fn get_category_by_path(&self, full_path: &str) -> Result<Option<Category>> {
+    pub async fn get_category_by_path(&self, full_path: &str) -> Result<Option<CategoryRecord>> {
         let sql = "SELECT string::split(<string> id, ':')[1] as id, name, parent_id, full_path, level, created_at FROM category WHERE full_path = $path";
         let mut result = self
             .db
@@ -529,17 +529,17 @@ impl Database {
             .bind(("path", full_path.to_string()))
             .await
             .map_err(FinanceError::Database)?;
-        let category: Option<Category> = result.take(0).map_err(FinanceError::Database)?;
+        let category: Option<CategoryRecord> = result.take(0).map_err(FinanceError::Database)?;
         Ok(category)
     }
 
     /// 根据完整路径查找分类，如果不存在则创建（自动创建父分类）
-    pub async fn find_or_create_category_by_path(&self, full_path: &str) -> Result<Category> {
+    pub async fn find_or_create_category_by_path(&self, full_path: &str) -> Result<CategoryRecord> {
         self.find_or_create_category_by_path_impl(full_path).await
     }
     
     /// 内部实现（boxed to avoid recursion in async）
-    fn find_or_create_category_by_path_impl<'a>(&'a self, full_path: &'a str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<Category>> + Send + 'a>> {
+    fn find_or_create_category_by_path_impl<'a>(&'a self, full_path: &'a str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<CategoryRecord>> + Send + 'a>> {
         Box::pin(async move {
             // 先查找
             if let Some(category) = self.get_category_by_path(full_path).await? {
@@ -560,12 +560,12 @@ impl Database {
             };
             
             // 创建当前分类
-            use crate::models::Category;
+            use crate::models::CategoryRecord;
             use surrealdb::Datetime;
             
             let level = parts.len() as u32;
             let id = generate_id("cat");
-            let category = Category {
+            let category = CategoryRecord {
                 id,
                 name,
                 parent_id,
@@ -578,15 +578,15 @@ impl Database {
     }
 
     /// 列出所有分类
-    pub async fn list_categories(&self) -> Result<Vec<Category>> {
+    pub async fn list_categories(&self) -> Result<Vec<CategoryRecord>> {
         let sql = "SELECT string::split(<string> id, ':')[1] as id, name, parent_id, full_path, level, created_at FROM category ORDER BY full_path";
         let mut result = self.db.query(sql).await.map_err(FinanceError::Database)?;
-        let categories: Vec<Category> = result.take(0).map_err(FinanceError::Database)?;
+        let categories: Vec<CategoryRecord> = result.take(0).map_err(FinanceError::Database)?;
         Ok(categories)
     }
 
     /// 列出子分类
-    pub async fn list_child_categories(&self, parent_id: &str) -> Result<Vec<Category>> {
+    pub async fn list_child_categories(&self, parent_id: &str) -> Result<Vec<CategoryRecord>> {
         let sql = "SELECT string::split(<string> id, ':')[1] as id, name, parent_id, full_path, level, created_at FROM category WHERE parent_id = $parent_id ORDER BY name";
         let mut result = self
             .db
@@ -594,12 +594,12 @@ impl Database {
             .bind(("parent_id", parent_id.to_string()))
             .await
             .map_err(FinanceError::Database)?;
-        let categories: Vec<Category> = result.take(0).map_err(FinanceError::Database)?;
+        let categories: Vec<CategoryRecord> = result.take(0).map_err(FinanceError::Database)?;
         Ok(categories)
     }
 
     /// 更新分类名称（需要级联更新full_path）
-    pub async fn update_category(&self, id: &str, name: &str) -> Result<Option<Category>> {
+    pub async fn update_category(&self, id: &str, name: &str) -> Result<Option<CategoryRecord>> {
         // 先获取原分类
         let old_category = match self.get_category(id).await? {
             Some(c) => c,
@@ -607,7 +607,7 @@ impl Database {
         };
 
         // 构建新的full_path
-        let new_full_path = if let Some(parent_path) = Category::parent_path(&old_category.full_path) {
+        let new_full_path = if let Some(parent_path) = crate::models::category_utils::parent_path(&old_category.full_path) {
             format!("{}/{}", parent_path, name)
         } else {
             name.to_string()
@@ -623,7 +623,7 @@ impl Database {
             .bind(("id", id.to_string()))
             .await
             .map_err(FinanceError::Database)?;
-        let updated: Option<Category> = result.take(0).map_err(FinanceError::Database)?;
+        let updated: Option<CategoryRecord> = result.take(0).map_err(FinanceError::Database)?;
 
         // 级联更新所有子分类的full_path
         self.update_child_category_paths(&old_category.full_path, &new_full_path).await?;
@@ -796,7 +796,7 @@ impl Database {
     }
 
     /// 批量获取分类（用于显示名称）
-    pub async fn get_categories_by_ids(&self, ids: &[String]) -> Result<Vec<Category>> {
+    pub async fn get_categories_by_ids(&self, ids: &[String]) -> Result<Vec<CategoryRecord>> {
         if ids.is_empty() {
             return Ok(Vec::new());
         }
@@ -807,7 +807,7 @@ impl Database {
             .bind(("ids", ids.to_vec()))
             .await
             .map_err(FinanceError::Database)?;
-        let categories: Vec<Category> = result.take(0).map_err(FinanceError::Database)?;
+        let categories: Vec<CategoryRecord> = result.take(0).map_err(FinanceError::Database)?;
         Ok(categories)
     }
 
@@ -891,7 +891,14 @@ impl Database {
                 category_map.insert(name, existing.id);
             } else if !dry_run {
                 let id = format!("cat_{}", nanoid::nanoid!(8));
-                let category = crate::models::Category::new_root(&id, &name);
+                let category = CategoryRecord {
+                    id: id.clone(),
+                    name: name.clone(),
+                    parent_id: None,
+                    full_path: name.clone(),
+                    level: 0,
+                    created_at: Datetime::from(chrono::Utc::now()),
+                };
                 self.create_category(category).await?;
                 category_map.insert(name, id);
                 stats.categories_created += 1;

@@ -2,7 +2,7 @@ use clap::{Args, Subcommand};
 
 use crate::db::surreal::Database;
 use crate::error::Result;
-use crate::models::Category;
+use crate::models::{CategoryRecord, category_utils};
 
 /// 分类管理子命令
 #[derive(Subcommand)]
@@ -68,7 +68,7 @@ async fn show_tree(db: &Database, args: TreeArgs) -> Result<()> {
     println!("\n📂 分类树\n");
 
     // 构建树结构
-    let mut roots: Vec<&Category> = categories.iter().filter(|c| c.parent_id.is_none()).collect();
+    let mut roots: Vec<&CategoryRecord> = categories.iter().filter(|c| c.parent_id.is_none()).collect();
     roots.sort_by(|a, b| a.name.cmp(&b.name));
 
     for root in roots {
@@ -81,8 +81,8 @@ async fn show_tree(db: &Database, args: TreeArgs) -> Result<()> {
 
 async fn print_category_node(
     _db: &Database,
-    category: &Category,
-    all_categories: &[Category],
+    category: &CategoryRecord,
+    all_categories: &[CategoryRecord],
     prefix: &str,
     max_depth: Option<u32>,
     current_depth: u32,
@@ -98,7 +98,7 @@ async fn print_category_node(
     println!("{}{}{}", prefix, connector, category.name);
 
     // 获取子分类
-    let mut children: Vec<&Category> = all_categories
+    let mut children: Vec<&CategoryRecord> = all_categories
         .iter()
         .filter(|c| c.parent_id.as_ref() == Some(&category.id))
         .collect();
@@ -134,7 +134,7 @@ async fn print_category_node(
 }
 
 async fn add_category(db: &Database, args: CategoryAddArgs) -> Result<()> {
-    let segments = Category::parse_path(&args.path);
+    let segments = category_utils::parse_path(&args.path);
 
     if segments.is_empty() {
         println!("❌ 无效的分类路径");
@@ -162,11 +162,14 @@ async fn add_category(db: &Database, args: CategoryAddArgs) -> Result<()> {
 
         // 创建新分类
         let id = format!("cat_{}", nanoid::nanoid!(8));
-        let category = if let Some(ref pid) = parent_id {
-            let parent_path = current_path.rfind('/').map(|i| &current_path[..i]).unwrap_or("");
-            Category::new_child(&id, *segment, pid, parent_path, (i as u32).saturating_sub(1))
-        } else {
-            Category::new_root(&id, *segment)
+        let level = i as u32;
+        let category = CategoryRecord {
+            id,
+            name: segment.to_string(),
+            parent_id: parent_id.clone(),
+            full_path: current_path.clone(),
+            level,
+            created_at: surrealdb::Datetime::from(chrono::Utc::now()),
         };
 
         let created = db.create_category(category).await?;
