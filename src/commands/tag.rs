@@ -13,8 +13,8 @@ pub enum TagCommands {
     Add(TagAddArgs),
     /// 重命名标签
     Rename(TagRenameArgs),
-    /// 删除标签
-    Delete(TagDeleteArgs),
+    /// 移除标签
+    Remove(TagRemoveArgs),
 }
 
 /// 添加标签参数
@@ -37,9 +37,9 @@ pub struct TagRenameArgs {
     pub new_name: String,
 }
 
-/// 删除标签参数
+/// 移除标签参数
 #[derive(Args)]
-pub struct TagDeleteArgs {
+pub struct TagRemoveArgs {
     /// 标签ID或名称
     pub id_or_name: String,
 }
@@ -49,7 +49,7 @@ pub async fn execute(db: &Database, command: TagCommands) -> Result<()> {
         TagCommands::List => list_tags(db).await,
         TagCommands::Add(args) => add_tag(db, args).await,
         TagCommands::Rename(args) => rename_tag(db, args).await,
-        TagCommands::Delete(args) => delete_tag(db, args).await,
+        TagCommands::Remove(args) => remove_tag(db, args).await,
     }
 }
 
@@ -135,7 +135,7 @@ async fn rename_tag(db: &Database, args: TagRenameArgs) -> Result<()> {
     Ok(())
 }
 
-async fn delete_tag(db: &Database, args: TagDeleteArgs) -> Result<()> {
+async fn remove_tag(db: &Database, args: TagRemoveArgs) -> Result<()> {
     // 尝试查找标签
     let tag = if let Some(tag) = db.find_tag_by_name(&args.id_or_name).await? {
         tag
@@ -146,9 +146,9 @@ async fn delete_tag(db: &Database, args: TagDeleteArgs) -> Result<()> {
         return Ok(());
     };
 
-    let deleted = db.delete_tag(&tag.id).await?;
-    if deleted {
-        println!("✅ 标签已删除: {} ({})", tag.name, tag.id);
+    let removed = db.delete_tag(&tag.id).await?;
+    if removed {
+        println!("✅ 标签已移除: {} ({})", tag.name, tag.id);
     }
 
     Ok(())

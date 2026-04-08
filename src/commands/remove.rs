@@ -3,17 +3,17 @@ use clap::Args;
 use crate::db::surreal::Database;
 use crate::error::Result;
 
-/// 删除交易记录
+/// 移除交易记录
 #[derive(Args)]
-pub struct DeleteArgs {
+pub struct RemoveArgs {
     /// 交易记录的短 ID（一个或多个）
     pub ids: Vec<String>,
 }
 
-pub async fn execute(db: &Database, args: DeleteArgs) -> Result<()> {
+pub async fn execute(db: &Database, args: RemoveArgs) -> Result<()> {
     if args.ids.is_empty() {
-        println!("❌ 请提供要删除的交易记录 ID");
-        println!("用法: finance delete <短ID> [短ID...]");
+        println!("❌ 请提供要移除的交易记录 ID");
+        println!("用法: finance remove <短ID> [短ID...]");
         return Ok(());
     }
 
@@ -32,7 +32,7 @@ pub async fn execute(db: &Database, args: DeleteArgs) -> Result<()> {
 
     for (id, success) in &results {
         if *success {
-            println!("✅ 已删除: {}", id);
+            println!("✅ 已移除: {}", id);
             success_count += 1;
         } else {
             println!("❌ 未找到: {}", id);
@@ -42,7 +42,7 @@ pub async fn execute(db: &Database, args: DeleteArgs) -> Result<()> {
 
     println!();
     if success_count > 0 {
-        println!("成功删除 {} 条记录", success_count);
+        println!("成功移除 {} 条记录", success_count);
     }
     if fail_count > 0 {
         println!("未找到 {} 条记录", fail_count);
@@ -54,7 +54,7 @@ pub async fn execute(db: &Database, args: DeleteArgs) -> Result<()> {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn test_delete_args_validation() {
+    fn test_remove_args_validation() {
         // 有效 ID: 12 位
         let valid_id = "f4sp877fxbwc";
         assert_eq!(valid_id.len(), 12);

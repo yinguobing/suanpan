@@ -13,8 +13,8 @@ pub enum AccountCommands {
     Add(AccountAddArgs),
     /// 重命名账户
     Rename(AccountRenameArgs),
-    /// 删除账户
-    Delete(AccountDeleteArgs),
+    /// 移除账户
+    Remove(AccountRemoveArgs),
 }
 
 /// 添加账户参数
@@ -41,9 +41,9 @@ pub struct AccountRenameArgs {
     pub new_name: String,
 }
 
-/// 删除账户参数
+/// 移除账户参数
 #[derive(Args)]
-pub struct AccountDeleteArgs {
+pub struct AccountRemoveArgs {
     /// 账户ID
     pub id: String,
 }
@@ -76,7 +76,7 @@ pub async fn execute(db: &Database, command: AccountCommands) -> Result<()> {
         AccountCommands::List => list_accounts(db).await,
         AccountCommands::Add(args) => add_account(db, args).await,
         AccountCommands::Rename(args) => rename_account(db, args).await,
-        AccountCommands::Delete(args) => delete_account(db, args).await,
+        AccountCommands::Remove(args) => remove_account(db, args).await,
     }
 }
 
@@ -164,7 +164,7 @@ async fn rename_account(db: &Database, args: AccountRenameArgs) -> Result<()> {
     Ok(())
 }
 
-async fn delete_account(db: &Database, args: AccountDeleteArgs) -> Result<()> {
+async fn remove_account(db: &Database, args: AccountRemoveArgs) -> Result<()> {
     // 检查账户是否存在
     if db.get_account(&args.id).await?.is_none() {
         println!("❌ 账户不存在: {}", args.id);
@@ -174,8 +174,8 @@ async fn delete_account(db: &Database, args: AccountDeleteArgs) -> Result<()> {
     // 检查是否有子账户
     let children = db.list_child_accounts(&args.id).await?;
     if !children.is_empty() {
-        println!("❌ 无法删除，该账户有 {} 个子账户", children.len());
-        println!("   请先删除子账户:");
+        println!("❌ 无法移除，该账户有 {} 个子账户", children.len());
+        println!("   请先移除子账户:");
         for child in children {
             println!("   - {} ({})", child.name, child.id);
         }
@@ -185,14 +185,14 @@ async fn delete_account(db: &Database, args: AccountDeleteArgs) -> Result<()> {
     // 检查是否有关联的交易记录
     let tx_count = db.count_transactions_by_account(&args.id).await?;
     if tx_count > 0 {
-        println!("❌ 无法删除：该账户被 {} 条交易记录引用", tx_count);
-        println!("   请先删除或修改相关交易记录后再试");
+        println!("❌ 无法移除：该账户被 {} 条交易记录引用", tx_count);
+        println!("   请先移除或修改相关交易记录后再试");
         return Ok(());
     }
 
-    let deleted = db.delete_account(&args.id).await?;
-    if deleted {
-        println!("✅ 账户已删除: {}", args.id);
+    let removed = db.delete_account(&args.id).await?;
+    if removed {
+        println!("✅ 账户已移除: {}", args.id);
     }
 
     Ok(())

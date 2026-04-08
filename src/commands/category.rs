@@ -15,8 +15,8 @@ pub enum CategoryCommands {
     Add(CategoryAddArgs),
     /// 重命名分类
     Rename(CategoryRenameArgs),
-    /// 删除分类
-    Delete(CategoryDeleteArgs),
+    /// 移除分类
+    Remove(CategoryRemoveArgs),
 }
 
 /// 列出分类参数
@@ -51,9 +51,9 @@ pub struct CategoryRenameArgs {
     pub new_name: String,
 }
 
-/// 删除分类参数
+/// 移除分类参数
 #[derive(Args)]
-pub struct CategoryDeleteArgs {
+pub struct CategoryRemoveArgs {
     /// 分类路径或ID
     pub path_or_id: String,
 }
@@ -64,7 +64,7 @@ pub async fn execute(db: &Database, command: CategoryCommands) -> Result<()> {
         CategoryCommands::Tree(args) => show_tree(db, args).await,
         CategoryCommands::Add(args) => add_category(db, args).await,
         CategoryCommands::Rename(args) => rename_category(db, args).await,
-        CategoryCommands::Delete(args) => delete_category(db, args).await,
+        CategoryCommands::Remove(args) => remove_category(db, args).await,
     }
 }
 
@@ -250,7 +250,7 @@ async fn rename_category(db: &Database, args: CategoryRenameArgs) -> Result<()> 
     Ok(())
 }
 
-async fn delete_category(db: &Database, args: CategoryDeleteArgs) -> Result<()> {
+async fn remove_category(db: &Database, args: CategoryRemoveArgs) -> Result<()> {
     // 尝试按ID或路径查找
     let category = db
         .get_category_by_path(&args.path_or_id)
@@ -272,20 +272,20 @@ async fn delete_category(db: &Database, args: CategoryDeleteArgs) -> Result<()> 
     // 检查是否有子分类
     let children = db.list_child_categories(&category.id).await?;
     if !children.is_empty() {
-        println!("⚠️  该分类有 {} 个子分类，将一并删除", children.len());
+        println!("⚠️  该分类有 {} 个子分类，将一并移除", children.len());
     }
 
     // 检查是否有关联的交易记录
     let tx_count = db.count_transactions_by_category(&category.id).await?;
     if tx_count > 0 {
-        println!("❌ 无法删除：该分类被 {} 条交易记录引用", tx_count);
-        println!("   请先删除或修改相关交易记录后再试");
+        println!("❌ 无法移除：该分类被 {} 条交易记录引用", tx_count);
+        println!("   请先移除或修改相关交易记录后再试");
         return Ok(());
     }
 
-    let deleted = db.delete_category(&category.id).await?;
-    if deleted {
-        println!("✅ 分类已删除: {}", category.full_path);
+    let removed = db.delete_category(&category.id).await?;
+    if removed {
+        println!("✅ 分类已移除: {}", category.full_path);
     }
 
     Ok(())

@@ -3,9 +3,9 @@ use clap::{Parser, Subcommand};
 pub mod account;
 pub mod add;
 pub mod category;
-pub mod delete;
 pub mod list;
 pub mod migrate;
+pub mod remove;
 pub mod stats;
 pub mod tag;
 pub mod update;
@@ -13,9 +13,9 @@ pub mod update;
 use account::AccountCommands;
 use add::AddArgs;
 use category::CategoryCommands;
-use delete::DeleteArgs;
 use list::ListArgs;
 use migrate::MigrateArgs;
+use remove::RemoveArgs;
 use stats::StatsArgs;
 use tag::TagCommands;
 use update::UpdateArgs;
@@ -44,12 +44,12 @@ pub enum Commands {
         #[command(subcommand)]
         command: CategoryCommands,
     },
-    /// 删除交易记录
-    Delete(DeleteArgs),
     /// 列出交易记录
     List(ListArgs),
     /// 数据迁移
     Migrate(MigrateArgs),
+    /// 移除交易记录
+    Remove(RemoveArgs),
     /// 统计报表
     Stats(StatsArgs),
     /// 标签管理
