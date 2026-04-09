@@ -7,6 +7,7 @@ pub mod import;
 pub mod list;
 pub mod migrate;
 pub mod remove;
+pub mod report;
 pub mod stats;
 pub mod tag;
 pub mod update;
@@ -18,6 +19,7 @@ use import::ImportArgs;
 use list::ListArgs;
 use migrate::MigrateArgs;
 use remove::RemoveArgs;
+use report::ReportArgs;
 use stats::StatsArgs;
 use tag::TagCommands;
 use update::UpdateArgs;
@@ -52,6 +54,8 @@ pub enum Commands {
     Migrate(MigrateArgs),
     /// 移除交易记录
     Remove(RemoveArgs),
+    /// 生成可视化报表
+    Report(ReportArgs),
     /// 统计报表
     Stats(StatsArgs),
     /// 标签管理
