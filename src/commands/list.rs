@@ -5,6 +5,16 @@ use comfy_table::Table;
 use crate::db::surreal::Database;
 use crate::error::Result;
 
+/// 输出格式
+#[derive(clap::ValueEnum, Clone, Debug, Default)]
+pub enum OutputFormat {
+    /// 表格格式
+    #[default]
+    Table,
+    /// CSV 格式
+    Csv,
+}
+
 /// 将 SurrealDB Datetime 格式化为本地时间字符串（完整格式）
 fn format_datetime(dt: &surrealdb::Datetime) -> String {
     let sql_dt: surrealdb::sql::Datetime = dt.to_owned().into_inner();
@@ -56,6 +66,10 @@ pub struct ListArgs {
     /// 显示 ID 而非名称
     #[arg(long)]
     pub show_ids: bool,
+
+    /// 输出格式 (table 或 csv)
+    #[arg(short, long, value_enum, default_value = "table")]
+    pub format: OutputFormat,
 }
 
 pub async fn execute(db: &Database, args: ListArgs) -> Result<()> {
@@ -89,19 +103,40 @@ pub async fn execute(db: &Database, args: ListArgs) -> Result<()> {
         .map(|c| (c.id, c.name))
         .collect();
 
+    // 根据格式选择输出方式
+    match args.format {
+        OutputFormat::Table => {
+            output_table(&transactions, &account_map, &category_map, args.show_ids, args.limit).await?;
+        }
+        OutputFormat::Csv => {
+            output_csv(&transactions, &account_map, &category_map, args.show_ids, args.limit).await?;
+        }
+    }
+
+    Ok(())
+}
+
+/// 以表格格式输出
+async fn output_table(
+    transactions: &[crate::models::transaction::Transaction],
+    account_map: &std::collections::HashMap<String, String>,
+    category_map: &std::collections::HashMap<String, String>,
+    show_ids: bool,
+    limit: usize,
+) -> Result<()> {
     let mut table = Table::new();
     table.set_header(vec![
         "时间", "类型", "金额", "货币", "账户", "去向", "分类", "备注", "ID",
     ]);
 
-    for tx in transactions.iter().take(args.limit) {
+    for tx in transactions.iter().take(limit) {
         let time = format_datetime(&tx.timestamp);
         let tx_type = format!("{}", tx.tx_type);
         let amount = tx.amount.to_string();
         let currency = &tx.currency;
         
-        // 根据 --show-ids 参数决定显示名称还是 ID
-        let account_from = if args.show_ids {
+        // 根据 show_ids 参数决定显示名称还是 ID
+        let account_from = if show_ids {
             tx.account_from_id.clone()
         } else {
             account_map
@@ -111,14 +146,14 @@ pub async fn execute(db: &Database, args: ListArgs) -> Result<()> {
         };
         
         let account_to = tx.account_to_id.as_deref().map(|id| {
-            if args.show_ids {
+            if show_ids {
                 id.to_string()
             } else {
                 account_map.get(id).cloned().unwrap_or_else(|| id.to_string())
             }
         });
         
-        let category = if args.show_ids {
+        let category = if show_ids {
             tx.category_id.clone()
         } else {
             category_map
@@ -144,9 +179,86 @@ pub async fn execute(db: &Database, args: ListArgs) -> Result<()> {
     }
 
     println!("{}", table);
-    println!("共 {} 条记录", transactions.len().min(args.limit));
+    println!("共 {} 条记录", transactions.len().min(limit));
+    
+    Ok(())
+}
+
+/// 以 CSV 格式输出
+async fn output_csv(
+    transactions: &[crate::models::transaction::Transaction],
+    account_map: &std::collections::HashMap<String, String>,
+    category_map: &std::collections::HashMap<String, String>,
+    show_ids: bool,
+    limit: usize,
+) -> Result<()> {
+    // CSV 头部
+    println!("时间,类型,金额,货币,账户,去向,分类,备注,ID");
+
+    for tx in transactions.iter().take(limit) {
+        let time = format_datetime(&tx.timestamp);
+        let tx_type = format!("{}", tx.tx_type);
+        let amount = tx.amount.to_string();
+        let currency = &tx.currency;
+        
+        // 根据 show_ids 参数决定显示名称还是 ID
+        let account_from = if show_ids {
+            tx.account_from_id.clone()
+        } else {
+            account_map
+                .get(&tx.account_from_id)
+                .cloned()
+                .unwrap_or_else(|| tx.account_from_id.clone())
+        };
+        
+        let account_to = tx.account_to_id.as_deref().map(|id| {
+            if show_ids {
+                id.to_string()
+            } else {
+                account_map.get(id).cloned().unwrap_or_else(|| id.to_string())
+            }
+        }).unwrap_or_else(|| "".to_string());
+        
+        let category = if show_ids {
+            tx.category_id.clone()
+        } else {
+            category_map
+                .get(&tx.category_id)
+                .cloned()
+                .unwrap_or_else(|| tx.category_id.clone())
+        };
+        
+        let description = tx.description.clone().unwrap_or_default();
+        let short_id = format_short_id(&tx.id);
+
+        // 转义包含逗号或引号的字段
+        let description_escaped = escape_csv_field(&description);
+        
+        println!(
+            "{},{},{},{},{},{},{},{},{}",
+            time,
+            tx_type,
+            amount,
+            currency,
+            escape_csv_field(&account_from),
+            escape_csv_field(&account_to),
+            escape_csv_field(&category),
+            description_escaped,
+            short_id
+        );
+    }
 
     Ok(())
+}
+
+/// 转义 CSV 字段（处理包含逗号、引号或换行符的情况）
+fn escape_csv_field(field: &str) -> String {
+    if field.contains(',') || field.contains('"') || field.contains('\n') || field.contains('\r') {
+        let escaped = field.replace('"', "\"\"");
+        format!("\"{}\"", escaped)
+    } else {
+        field.to_string()
+    }
 }
 
 fn parse_date(date_str: &str) -> Result<chrono::NaiveDate> {
