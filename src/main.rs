@@ -3,7 +3,7 @@ use clap::Parser;
 use dirs::data_dir;
 use std::path::PathBuf;
 
-use finance_cli::commands::{account, add, category, list, migrate, remove, stats, tag, update, Cli, Commands};
+use finance_cli::commands::{account, add, category, import, list, migrate, remove, stats, tag, update, Cli, Commands};
 use finance_cli::db::surreal::Database;
 
 #[tokio::main]
@@ -23,6 +23,7 @@ async fn main() -> Result<()> {
         Commands::Account { command } => account::execute(&db, command).await?,
         Commands::Add(args) => add::execute(&db, args).await?,
         Commands::Category { command } => category::execute(&db, command).await?,
+        Commands::Import(args) => import::execute(&db, args).await?,
         Commands::List(args) => list::execute(&db, args).await?,
         Commands::Migrate(args) => migrate::execute(&db, args).await?,
         Commands::Remove(args) => remove::execute(&db, args).await?,

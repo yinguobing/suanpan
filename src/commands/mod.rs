@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 pub mod account;
 pub mod add;
 pub mod category;
+pub mod import;
 pub mod list;
 pub mod migrate;
 pub mod remove;
@@ -13,6 +14,7 @@ pub mod update;
 use account::AccountCommands;
 use add::AddArgs;
 use category::CategoryCommands;
+use import::ImportArgs;
 use list::ListArgs;
 use migrate::MigrateArgs;
 use remove::RemoveArgs;
@@ -59,4 +61,6 @@ pub enum Commands {
     },
     /// 更新交易记录
     Update(UpdateArgs),
+    /// 导入交易记录（支持 XLS/XLSX/CSV）
+    Import(ImportArgs),
 }
