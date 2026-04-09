@@ -15,12 +15,20 @@ pub enum OutputFormat {
     Csv,
 }
 
-/// 将 SurrealDB Datetime 格式化为本地时间字符串（完整格式）
+/// 将 SurrealDB Datetime 格式化为本地时间字符串（完整格式，用于表格显示）
 fn format_datetime(dt: &surrealdb::Datetime) -> String {
     let sql_dt: surrealdb::sql::Datetime = dt.to_owned().into_inner();
     let utc_dt: chrono::DateTime<chrono::Utc> = sql_dt.into();
     let local_dt: chrono::DateTime<Local> = utc_dt.into();
     local_dt.format("%Y-%m-%d %H:%M:%S").to_string()
+}
+
+/// 将 SurrealDB Datetime 格式化为 ISO 8601 格式（用于 CSV 导出）
+fn format_datetime_iso(dt: &surrealdb::Datetime) -> String {
+    let sql_dt: surrealdb::sql::Datetime = dt.to_owned().into_inner();
+    let utc_dt: chrono::DateTime<chrono::Utc> = sql_dt.into();
+    // 格式化为带时区的 ISO 8601 格式，例如 2026-04-09T11:25:00+08:00
+    utc_dt.with_timezone(&Local).to_rfc3339()
 }
 
 /// 从 RecordId 提取短 ID（前12位）
@@ -130,7 +138,7 @@ async fn output_table(
     ]);
 
     for tx in transactions.iter().take(limit) {
-        let time = format_datetime(&tx.timestamp);
+        let time = format_datetime_iso(&tx.timestamp);
         let tx_type = format!("{}", tx.tx_type);
         let amount = tx.amount.to_string();
         let currency = &tx.currency;
