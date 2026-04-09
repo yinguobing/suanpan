@@ -281,8 +281,7 @@ async fn parse_csv(path: &Path, args: &ImportArgs) -> Result<Vec<ParsedTransacti
 fn parse_suishouji_sheet(rows: &[Vec<Data>]) -> Result<Vec<ParsedTransaction>> {
     let mut result = Vec::new();
     
-    // 随手记通常的列：时间, 类型, 金额, 账户, 分类, 项目, 商家, 备注
-    // 先找到表头行
+    // 随手记字段：交易类型, 分类, 子分类, 账户1, 账户2, 金额, 日期, 成员, 项目, 商家, 备注
     let mut header_idx: HashMap<String, usize> = HashMap::new();
     let mut header_row = 0;
 
@@ -290,21 +289,27 @@ fn parse_suishouji_sheet(rows: &[Vec<Data>]) -> Result<Vec<ParsedTransaction>> {
         for (j, cell) in row.iter().enumerate() {
             if let Data::String(s) = cell {
                 let s = s.trim();
-                if s == "时间" || s == "日期" {
+                if s == "日期" || s == "时间" {
                     header_idx.insert("time".to_string(), j);
                     header_row = i;
-                } else if s == "类型" || s == "收支" {
-                    header_idx.insert("type".to_string(), j);
+                } else if s == "交易类型" || s == "类型" {
+                    header_idx.insert("tx_type".to_string(), j);
                 } else if s == "金额" {
                     header_idx.insert("amount".to_string(), j);
-                } else if s == "账户" {
-                    header_idx.insert("account".to_string(), j);
-                } else if s == "分类" || s == "类别" {
+                } else if s == "账户1" {
+                    header_idx.insert("account1".to_string(), j);
+                } else if s == "账户2" {
+                    header_idx.insert("account2".to_string(), j);
+                } else if s == "分类" {
                     header_idx.insert("category".to_string(), j);
-                } else if s == "备注" || s == "说明" {
+                } else if s == "子分类" {
+                    header_idx.insert("subcategory".to_string(), j);
+                } else if s == "备注" {
                     header_idx.insert("note".to_string(), j);
-                } else if s == "项目" || s == "商家" {
+                } else if s == "项目" {
                     header_idx.insert("project".to_string(), j);
+                } else if s == "商家" {
+                    header_idx.insert("merchant".to_string(), j);
                 }
             }
         }
@@ -321,58 +326,79 @@ fn parse_suishouji_sheet(rows: &[Vec<Data>]) -> Result<Vec<ParsedTransaction>> {
 
         let get_str = |key: &str| -> Option<String> {
             header_idx.get(key).and_then(|&idx| {
-                row.get(idx).map(|cell| match cell {
-                    Data::String(s) => s.trim().to_string(),
-                    Data::Float(f) => f.to_string(),
-                    Data::Int(i) => i.to_string(),
-                    Data::Bool(b) => b.to_string(),
-                    Data::DateTime(d) => d.to_string(),
-                    _ => String::new(),
+                row.get(idx).and_then(|cell| match cell {
+                    Data::String(s) => {
+                        let s = s.trim();
+                        if s.is_empty() || s == "NaN" { None } else { Some(s.to_string()) }
+                    }
+                    Data::Float(f) => Some(f.to_string()),
+                    Data::Int(i) => Some(i.to_string()),
+                    _ => None,
                 })
             })
         };
 
         let time_str = match get_str("time") {
-            Some(s) if !s.is_empty() => s,
+            Some(s) => s,
             _ => continue,
         };
 
         let amount_str = match get_str("amount") {
-            Some(s) if !s.is_empty() => s,
+            Some(s) => s,
             _ => continue,
         };
 
         // 解析时间
         let timestamp = parse_datetime(&time_str)?;
 
-        // 解析金额和类型
-        let (amount, tx_type) = parse_amount_and_type(&amount_str, get_str("type").as_deref())?;
+        // 交易类型（支出/收入/转账/余额变更/负债变更/债权变更）
+        let tx_type_str = get_str("tx_type").unwrap_or_else(|| "支出".to_string());
+        let tx_type = match tx_type_str.as_str() {
+            "收入" => TxType::Income,
+            "转账" => TxType::Transfer,
+            "余额变更" => TxType::Transfer, // 映射为转账
+            "负债变更" => TxType::DebtChange,
+            "债权变更" => TxType::CreditChange,
+            _ => TxType::Expense,
+        };
 
-        // 账户
-        let account = get_str("account").unwrap_or_else(|| "现金".to_string());
+        // 解析金额（随手记金额可能有正负号）
+        let amount: Decimal = amount_str
+            .replace("¥", "")
+            .replace("￥", "")
+            .replace(",", "")
+            .parse()
+            .map_err(|_| crate::error::FinanceError::Parse(format!("无法解析金额: {}", amount_str)))?;
+        let amount = amount.abs();
 
-        // 分类
-        let category = get_str("category").unwrap_or_else(|| "其他".to_string());
+        // 账户1（来源账户）
+        let account_from = get_str("account1").unwrap_or_else(|| "现金".to_string());
 
-        // 备注（合并备注和项目/商家）
-        let mut description = get_str("note").unwrap_or_default();
-        if let Some(project) = get_str("project") {
-            if !project.is_empty() && project != category {
-                if !description.is_empty() {
-                    description.push_str(" / ");
-                }
-                description.push_str(&project);
-            }
-        }
+        // 账户2（目标账户，转账时使用）
+        let account_to = get_str("account2");
+
+        // 分类（组合分类和子分类）
+        let category = match (get_str("category"), get_str("subcategory")) {
+            (Some(cat), Some(sub)) if !sub.is_empty() => format!("{}/{}", cat, sub),
+            (Some(cat), _) => cat,
+            _ => "其他".to_string(),
+        };
+
+        // 备注（合并备注、项目、商家）
+        let mut parts = Vec::new();
+        if let Some(note) = get_str("note") { parts.push(note); }
+        if let Some(project) = get_str("project") { parts.push(project); }
+        if let Some(merchant) = get_str("merchant") { parts.push(merchant); }
+        let description = if parts.is_empty() { None } else { Some(parts.join(" / ")) };
 
         result.push(ParsedTransaction {
             timestamp,
             amount,
             tx_type,
-            account_from: account,
-            account_to: None,
+            account_from,
+            account_to,
             category,
-            description: if description.is_empty() { None } else { Some(description) },
+            description,
             currency: "CNY".to_string(),
         });
     }
@@ -478,8 +504,10 @@ fn parse_generic_sheet(rows: &[Vec<Data>]) -> Result<Vec<ParsedTransaction>> {
     Ok(result)
 }
 
-/// 解析时间字符串
+/// 解析时间字符串（随手记格式为本地时间，需要转换为 UTC）
 fn parse_datetime(s: &str) -> Result<chrono::DateTime<chrono::Utc>> {
+    use chrono::TimeZone;
+
     // 尝试多种格式
     let formats = [
         "%Y-%m-%d %H:%M:%S",
@@ -492,26 +520,33 @@ fn parse_datetime(s: &str) -> Result<chrono::DateTime<chrono::Utc>> {
         "%Y年%m月%d日",
     ];
 
+    // 先尝试作为带时区的 RFC3339 格式解析
+    if let Ok(dt) = chrono::DateTime::parse_from_rfc3339(s) {
+        return Ok(dt.with_timezone(&chrono::Utc));
+    }
+
+    // 作为本地时间（东八区北京时间）解析
+    let beijing = chrono::FixedOffset::east_opt(8 * 3600).unwrap();
+    
     for fmt in &formats {
         if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s, fmt) {
-            return Ok(chrono::DateTime::from_naive_utc_and_offset(
-                dt,
-                chrono::Utc,
-            ));
+            let local_dt = beijing.from_local_datetime(&dt).single().unwrap();
+            return Ok(local_dt.with_timezone(&chrono::Utc));
         }
     }
 
-    // 尝试解析日期（没有时间）
+    // 尝试解析日期（没有时间），默认 00:00
     for fmt in &["%Y-%m-%d", "%Y/%m/%d", "%Y年%m月%d日"] {
         if let Ok(d) = chrono::NaiveDate::parse_from_str(s, fmt) {
             let dt = d.and_hms_opt(0, 0, 0).unwrap();
-            return Ok(chrono::DateTime::from_naive_utc_and_offset(dt, chrono::Utc));
+            let local_dt = beijing.from_local_datetime(&dt).single().unwrap();
+            return Ok(local_dt.with_timezone(&chrono::Utc));
         }
     }
 
     // 如果是 Excel 序列号（数字）
     if let Ok(days) = s.parse::<f64>() {
-        // Excel 日期从 1899-12-30 开始
+        // Excel 日期从 1899-12-30 开始，结果是 UTC 时间
         let base = chrono::NaiveDate::from_ymd_opt(1899, 12, 30).unwrap();
         let days = days as i64;
         if let Some(date) = base.checked_add_signed(chrono::Duration::days(days)) {
