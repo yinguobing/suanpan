@@ -1347,7 +1347,6 @@ dependencies = [
  "comfy-table",
  "dirs",
  "nanoid",
- "once_cell",
  "plotters",
  "rust_decimal",
  "rust_decimal_macros",
@@ -1357,7 +1356,6 @@ dependencies = [
  "thiserror 2.0.18",
  "tokio",
  "tree-ds",
- "uuid",
 ]
 
 [[package]]
