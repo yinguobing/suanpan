@@ -1,4 +1,4 @@
-# 国冰财务管理系统 PRD
+# 算盘 PRD
 
 ## 1. 产品概述
 
@@ -53,7 +53,7 @@
   - 支出分类饼图（Top 8 + 其他聚合）
   - 收支趋势折线图（最近12个月）
   - 每日收支柱状图
-  - 命令: `finance report --month YYYY-MM`
+  - 命令: `suanpan report --month YYYY-MM`
 
 ---
 
@@ -71,7 +71,7 @@
 
 ### 4.2 项目结构
 ```
-finance-cli/
+suanpan/
 ├── Cargo.toml
 ├── src/
 │   ├── main.rs              # CLI 入口

@@ -3,8 +3,8 @@ use clap::Parser;
 use dirs::data_dir;
 use std::path::PathBuf;
 
-use finance_cli::commands::{account, add, category, import, list, migrate, remove, report, stats, tag, update, Cli, Commands};
-use finance_cli::db::surreal::Database;
+use suanpan::commands::{account, add, category, import, list, migrate, remove, report, stats, tag, update, Cli, Commands};
+use suanpan::db::surreal::Database;
 
 #[tokio::main]
 async fn main() -> Result<()> {
@@ -40,5 +40,26 @@ fn get_data_dir() -> Result<PathBuf> {
     let base_dir = data_dir().ok_or_else(|| {
         anyhow::anyhow!("无法获取数据目录")
     })?;
-    Ok(base_dir.join("finance-cli"))
+    let new_dir = base_dir.join("suanpan");
+    let old_dir = base_dir.join("finance-cli");
+    
+    // 如果新目录不存在且旧目录存在，执行迁移
+    if !new_dir.exists() && old_dir.exists() {
+        println!("📦 检测到旧版本数据，正在迁移...");
+        std::fs::create_dir_all(&new_dir)?;
+        
+        // 复制所有文件
+        for entry in std::fs::read_dir(&old_dir)? {
+            let entry = entry?;
+            let src = entry.path();
+            let dst = new_dir.join(entry.file_name());
+            if src.is_file() {
+                std::fs::copy(&src, &dst)?;
+            }
+        }
+        println!("✅ 数据迁移完成！旧数据保留在: {}", old_dir.display());
+        println!();
+    }
+    
+    Ok(new_dir)
 }

@@ -1337,28 +1337,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "finance-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "calamine",
- "chrono",
- "clap",
- "comfy-table",
- "dirs",
- "nanoid",
- "plotters",
- "rust_decimal",
- "rust_decimal_macros",
- "serde",
- "serde_json",
- "surrealdb",
- "thiserror 2.0.18",
- "tokio",
- "tree-ds",
-]
-
-[[package]]
 name = "find-msvc-tools"
 version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4162,6 +4140,28 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.117",
+]
+
+[[package]]
+name = "suanpan"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "calamine",
+ "chrono",
+ "clap",
+ "comfy-table",
+ "dirs",
+ "nanoid",
+ "plotters",
+ "rust_decimal",
+ "rust_decimal_macros",
+ "serde",
+ "serde_json",
+ "surrealdb",
+ "thiserror 2.0.18",
+ "tokio",
+ "tree-ds",
 ]
 
 [[package]]

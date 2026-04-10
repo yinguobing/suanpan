@@ -1,9 +1,9 @@
 [package]
-name = "finance-cli"
+name = "suanpan"
 version = "0.1.0"
 edition = "2021"
 authors = ["尹国冰"]
-description = "个人财务管理 CLI 工具"
+description = "算盘 - 智能体时代的个人财务管理 CLI 工具"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }
@@ -26,5 +26,5 @@ plotters = "0.3"
 rust_decimal_macros = "1.36"
 
 [[bin]]
-name = "finance"
+name = "suanpan"
 path = "src/main.rs"

@@ -1,6 +1,8 @@
-# 国冰财务管理系统 (finance-cli)
+# 算盘 (suanpan)
 
-智能体时代的个人财务管理CLI工具，基于Rust + SurrealDB构建，支持本地数据存储和多种交易类型管理。
+智能体时代的个人财务管理 CLI 工具。算盘是中国传统计算工具，象征精确与效率。
+
+基于 Rust + SurrealDB 构建，支持本地数据存储和多种交易类型管理。
 
 将此页面发给你的智能体，让它协助你管理自己的财务。
 
@@ -19,14 +21,14 @@
 
 ```bash
 # 克隆仓库
-git clone https://github.com/yinguobing/finance-cli.git
-cd finance-cli
+git clone https://github.com/yinguobing/suanpan.git
+cd suanpan
 
 # 编译发布版本
 cargo build --release
 
 # 将二进制文件添加到 PATH
-sudo cp target/release/finance /usr/local/bin/finance
+sudo cp target/release/suanpan /usr/local/bin/suanpan
 ```
 
 ### 依赖
@@ -38,16 +40,16 @@ sudo cp target/release/finance /usr/local/bin/finance
 
 ```bash
 # 添加一笔支出
-finance add -a 35 -f 支付宝 -o 食堂 -c 餐饮 -d "午餐"
+suanpan add -a 35 -f 支付宝 -o 食堂 -c 餐饮 -d "午餐"
 
 # 添加一笔收入
-finance add -a 8500 -t income -f 公司 -o 招行卡 -c 工资 -d "三月工资"
+suanpan add -a 8500 -t income -f 公司 -o 招行卡 -c 工资 -d "三月工资"
 
 # 查看最近记录
-finance list
+suanpan list
 
 # 查看月度统计
-finance stats --by-category
+suanpan stats --by-category
 ```
 
 ## 命令参考
@@ -55,7 +57,7 @@ finance stats --by-category
 ### `add` - 添加交易记录
 
 ```bash
-finance add [OPTIONS] --amount <AMOUNT> --from <FROM>
+suanpan add [OPTIONS] --amount <AMOUNT> --from <FROM>
 
 选项:
   -a, --amount <AMOUNT>            金额（必填）
@@ -80,22 +82,22 @@ finance add [OPTIONS] --amount <AMOUNT> --from <FROM>
 
 ```bash
 # 支出
-finance add -a 35 -f 支付宝 -o 食堂 -c 餐饮
+suanpan add -a 35 -f 支付宝 -o 食堂 -c 餐饮
 
 # 收入
-finance add -a 8500 -t income -f 公司 -o 招行卡 -c 工资
+suanpan add -a 8500 -t income -f 公司 -o 招行卡 -c 工资
 
 # 转账
-finance add -a 1000 -t transfer -f 招行卡 -o 支付宝
+suanpan add -a 1000 -t transfer -f 招行卡 -o 支付宝
 
 # 添加标签
-finance add -a 200 -f 现金 -o 朋友 -c 人情 -g 借款 -g 2026-Q1
+suanpan add -a 200 -f 现金 -o 朋友 -c 人情 -g 借款 -g 2026-Q1
 ```
 
 ### `list` - 列出交易记录
 
 ```bash
-finance list [OPTIONS]
+suanpan list [OPTIONS]
 
 选项:
   -n, --limit <LIMIT>      显示条数 [默认: 20]
@@ -110,22 +112,22 @@ finance list [OPTIONS]
 
 ```bash
 # 列出最近20条
-finance list
+suanpan list
 
 # 列出最近10条
-finance list -n 10
+suanpan list -n 10
 
 # 按分类筛选
-finance list -c 餐饮
+suanpan list -c 餐饮
 
 # 按日期范围筛选
-finance list --from 2026-04-01 --to 2026-04-30
+suanpan list --from 2026-04-01 --to 2026-04-30
 ```
 
 ### `stats` - 统计报表
 
 ```bash
-finance stats [OPTIONS]
+suanpan stats [OPTIONS]
 
 选项:
   -m, --month <MONTH>      月份 (YYYY-MM) [默认: 当前月]
@@ -137,22 +139,22 @@ finance stats [OPTIONS]
 
 ```bash
 # 本月统计
-finance stats
+suanpan stats
 
 # 本月统计（含分类占比）
-finance stats --by-category
+suanpan stats --by-category
 
 # 指定月份
-finance stats -m 2026-03
+suanpan stats -m 2026-03
 ```
 
 ## 数据存储
 
 数据默认存储在：
 
-- **Linux**: `~/.local/share/finance-cli/data.db`
-- **macOS**: `~/Library/Application Support/finance-cli/data.db`
-- **Windows**: `%APPDATA%\finance-cli\data.db`
+- **Linux**: `~/.local/share/suanpan/data.db`
+- **macOS**: `~/Library/Application Support/suanpan/data.db`
+- **Windows**: `%APPDATA%\suanpan\data.db`
 
 ### 备份
 
@@ -160,10 +162,10 @@ finance stats -m 2026-03
 
 ```bash
 # 备份
-cp ~/.local/share/finance-cli/data.db ~/finance-backup-$(date +%Y%m%d).db
+cp ~/.local/share/suanpan/data.db ~/suanpan-backup-$(date +%Y%m%d).db
 
 # 恢复
-cp ~/finance-backup-20260406.db ~/.local/share/finance-cli/data.db
+cp ~/suanpan-backup-20260406.db ~/.local/share/suanpan/data.db
 ```
 
 ## 交易类型说明

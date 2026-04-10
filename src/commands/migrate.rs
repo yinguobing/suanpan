@@ -18,7 +18,7 @@ pub struct MigrateArgs {
 pub async fn execute(db: &Database, args: MigrateArgs) -> Result<()> {
     if !args.skip_backup {
         println!("⚠️  警告：数据迁移会修改数据库结构");
-        println!("   建议先备份数据文件: ~/.local/share/finance-cli/data.db");
+        println!("   建议先备份数据文件: ~/.local/share/suanpan/data.db");
         println!("   使用 --skip-backup 跳过此提示");
         println!();
     }
