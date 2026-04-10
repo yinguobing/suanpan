@@ -1,21 +1,38 @@
-use chrono::{Datelike, Local};
+use chrono::{Datelike, Local, NaiveDate};
 use clap::Args;
 use comfy_table::Table;
 use rust_decimal::Decimal;
 
-use crate::db::surreal::Database;
+use crate::db::surreal::{Database, PeriodStats};
+use crate::db::MonthlyStats;
 use crate::error::Result;
 
 /// 统计报表
 #[derive(Args)]
 pub struct StatsArgs {
     /// 月份（格式：YYYY-MM）
-    #[arg(short, long)]
+    #[arg(short, long, group = "time_range")]
     pub month: Option<String>,
+
+    /// 起始日期（格式：YYYY-MM-DD）
+    #[arg(long, group = "time_range")]
+    pub from: Option<String>,
+
+    /// 结束日期（格式：YYYY-MM-DD，需与 --from 同时使用）
+    #[arg(long, requires = "from")]
+    pub to: Option<String>,
 
     /// 按分类统计
     #[arg(long)]
     pub by_category: bool,
+
+    /// 按账户统计
+    #[arg(long)]
+    pub by_account: bool,
+
+    /// 指定账户统计（账户ID或名称）
+    #[arg(long)]
+    pub account: Option<String>,
 
     /// 显示分类 ID 而非名称
     #[arg(long)]
@@ -23,56 +40,290 @@ pub struct StatsArgs {
 }
 
 pub async fn execute(db: &Database, args: StatsArgs) -> Result<()> {
-    let now = Local::now();
-    let (year, month) = if let Some(month_str) = args.month {
-        parse_month(&month_str)?
+    // 处理账户统计
+    if args.by_account || args.account.is_some() {
+        let (from_dt, to_dt) = if args.from.is_some() {
+            // 自定义日期范围
+            let from_date = parse_date(args.from.as_ref().unwrap())?;
+            let to_date = match &args.to {
+                Some(to_str) => parse_date(to_str)?,
+                None => Local::now().date_naive(),
+            };
+
+            if from_date > to_date {
+                return Err(crate::error::FinanceError::Validation(
+                    "起始日期不能晚于结束日期".to_string(),
+                ));
+            }
+
+            let from_dt = from_date.and_hms_opt(0, 0, 0).unwrap().and_utc();
+            let to_dt = to_date.and_hms_opt(23, 59, 59).unwrap().and_utc();
+            (Some(from_dt), Some(to_dt))
+        } else if args.month.is_some() {
+            // 指定月份
+            let (year, month) = parse_month(args.month.as_ref().unwrap())?;
+            let start = NaiveDate::from_ymd_opt(year, month, 1)
+                .ok_or_else(|| crate::error::FinanceError::Validation("无效的日期".to_string()))?;
+            let end = if month == 12 {
+                NaiveDate::from_ymd_opt(year + 1, 1, 1)
+            } else {
+                NaiveDate::from_ymd_opt(year, month + 1, 1)
+            }
+            .ok_or_else(|| crate::error::FinanceError::Validation("无效的日期".to_string()))?;
+
+            let from_dt = start.and_hms_opt(0, 0, 0).unwrap().and_utc();
+            let to_dt = end.and_hms_opt(0, 0, 0).unwrap().and_utc();
+            (Some(from_dt), Some(to_dt))
+        } else {
+            // 不限定日期范围
+            (None, None)
+        };
+
+        // 解析账户参数（可能是ID或名称）
+        let account_filter = if let Some(acc) = &args.account {
+            // 先尝试作为ID查找，如果找不到则作为名称查找
+            if let Some(account) = db.get_account(acc).await? {
+                Some(account.id)
+            } else if let Some(account) = db.find_account_by_name(acc).await? {
+                Some(account.id)
+            } else {
+                return Err(crate::error::FinanceError::Validation(
+                    format!("未找到账户: {}", acc)
+                ));
+            }
+        } else {
+            None
+        };
+
+        let account_stats = db
+            .get_stats_by_account(account_filter.as_deref(), from_dt, to_dt)
+            .await?;
+
+        // 如果指定了特定账户，过滤只显示该账户
+        let filtered_stats: Vec<_> = if args.account.is_some() {
+            account_stats
+                .into_iter()
+                .filter(|s| Some(&s.account_id) == account_filter.as_ref())
+                .collect()
+        } else {
+            account_stats
+        };
+
+        print_account_stats(&filtered_stats, args.show_ids, args.account.is_some());
+        return Ok(());
+    }
+
+    // 判断使用自定义日期范围还是月度统计
+    let use_date_range = args.from.is_some();
+
+    if use_date_range {
+        // 自定义日期范围统计
+        let from_date = parse_date(args.from.as_ref().unwrap())?;
+        let to_date = match &args.to {
+            Some(to_str) => parse_date(to_str)?,
+            None => Local::now().date_naive(),
+        };
+
+        // 验证日期范围
+        if from_date > to_date {
+            return Err(crate::error::FinanceError::Validation(
+                "起始日期不能晚于结束日期".to_string(),
+            ));
+        }
+
+        let from_dt = from_date.and_hms_opt(0, 0, 0).unwrap().and_utc();
+        let to_dt = to_date.and_hms_opt(23, 59, 59).unwrap().and_utc();
+
+        let stats = db.get_stats_by_date_range(from_dt, to_dt).await?;
+
+        print_period_stats(&stats, args.by_category, args.show_ids);
     } else {
-        (now.year(), now.month())
-    };
+        // 月度统计
+        let now = Local::now();
+        let (year, month) = if let Some(month_str) = args.month {
+            parse_month(&month_str)?
+        } else {
+            (now.year(), now.month())
+        };
 
-    let stats = db.get_monthly_stats(year, month).await?;
+        let stats = db.get_monthly_stats(year, month).await?;
 
-    println!("\n📊 {}年{}月 财务统计\n", year, month);
+        print_monthly_stats(&stats, args.by_category, args.show_ids);
+    }
+
+    Ok(())
+}
+
+/// 打印月度统计结果
+fn print_monthly_stats(stats: &MonthlyStats, by_category: bool, show_ids: bool) {
+    println!("\n📊 {}年{}月 财务统计\n", stats.year, stats.month);
 
     // 基本统计
     let mut table = Table::new();
     table.set_header(vec!["项目", "金额"]);
     table.add_row(vec!["总收入", &format!("¥{}", stats.total_income)]);
     table.add_row(vec!["总支出", &format!("¥{}", stats.total_expense)]);
-    
+
     let net_color = if stats.net >= Decimal::ZERO { "+" } else { "" };
-    table.add_row(vec!["净收支", &format!("{}{}¥{}", net_color, if stats.net >= Decimal::ZERO { "" } else { "" }, stats.net)]);
+    table.add_row(vec![
+        "净收支",
+        &format!(
+            "{}{}¥{}",
+            net_color,
+            if stats.net >= Decimal::ZERO { "" } else { "" },
+            stats.net
+        ),
+    ]);
     table.add_row(vec!["交易笔数", &stats.transaction_count.to_string()]);
     println!("{}", table);
 
     // 分类统计
-    if args.by_category && !stats.category_breakdown.is_empty() {
-        println!("\n📈 支出分类占比\n");
-        let mut cat_table = Table::new();
-        cat_table.set_header(vec!["分类", "金额", "占比"]);
+    if by_category && !stats.category_breakdown.is_empty() {
+        print_category_breakdown(&stats.category_breakdown, stats.total_expense, show_ids);
+    }
+}
 
-        let mut categories: Vec<_> = stats.category_breakdown.iter().collect();
-        // 按金额降序排序
-        categories.sort_by(|a, b| b.1.1.cmp(&a.1.1));
+/// 打印自定义日期范围统计结果
+fn print_period_stats(stats: &PeriodStats, by_category: bool, show_ids: bool) {
+    let from_str = stats.from.format("%Y-%m-%d").to_string();
+    let to_str = stats.to.format("%Y-%m-%d").to_string();
 
-        for (category_id, (category_name, amount)) in categories {
-            let percentage = if stats.total_expense > Decimal::ZERO {
-                (*amount / stats.total_expense * Decimal::from(100)).round_dp(1)
-            } else {
-                Decimal::ZERO
-            };
-            // 根据 --show-ids 参数决定显示 ID 还是名称
-            let display_name = if args.show_ids { category_id } else { category_name };
-            cat_table.add_row(vec![
-                display_name,
-                &format!("¥{}", amount),
-                &format!("{}%", percentage),
-            ]);
-        }
-        println!("{}", cat_table);
+    if from_str == to_str {
+        println!("\n📊 {} 财务统计\n", from_str);
+    } else {
+        println!("\n📊 {} 至 {} 财务统计\n", from_str, to_str);
     }
 
-    Ok(())
+    // 基本统计
+    let mut table = Table::new();
+    table.set_header(vec!["项目", "金额"]);
+    table.add_row(vec!["总收入", &format!("¥{}", stats.total_income)]);
+    table.add_row(vec!["总支出", &format!("¥{}", stats.total_expense)]);
+
+    let net_color = if stats.net >= Decimal::ZERO { "+" } else { "" };
+    table.add_row(vec![
+        "净收支",
+        &format!(
+            "{}{}¥{}",
+            net_color,
+            if stats.net >= Decimal::ZERO { "" } else { "" },
+            stats.net
+        ),
+    ]);
+    table.add_row(vec!["交易笔数", &stats.transaction_count.to_string()]);
+    println!("{}", table);
+
+    // 分类统计
+    if by_category && !stats.category_breakdown.is_empty() {
+        print_category_breakdown(&stats.category_breakdown, stats.total_expense, show_ids);
+    }
+}
+
+/// 打印分类统计表格
+fn print_category_breakdown(
+    category_breakdown: &std::collections::HashMap<String, (String, Decimal)>,
+    total_expense: Decimal,
+    show_ids: bool,
+) {
+    println!("\n📈 支出分类占比\n");
+    let mut cat_table = Table::new();
+    cat_table.set_header(vec!["分类", "金额", "占比"]);
+
+    let mut categories: Vec<_> = category_breakdown.iter().collect();
+    // 按金额降序排序
+    categories.sort_by(|a, b| b.1.1.cmp(&a.1.1));
+
+    for (category_id, (category_name, amount)) in categories {
+        let percentage = if total_expense > Decimal::ZERO {
+            (*amount / total_expense * Decimal::from(100)).round_dp(1)
+        } else {
+            Decimal::ZERO
+        };
+        // 根据 show_ids 参数决定显示 ID 还是名称
+        let display_name = if show_ids { category_id } else { category_name };
+        cat_table.add_row(vec![
+            display_name,
+            &format!("¥{}", amount),
+            &format!("{}%", percentage),
+        ]);
+    }
+    println!("{}", cat_table);
+}
+
+/// 打印账户统计结果
+fn print_account_stats(
+    account_stats: &[crate::db::surreal::AccountStats],
+    show_ids: bool,
+    single_account: bool,
+) {
+    if account_stats.is_empty() {
+        println!("\n📊 没有找到账户统计数据\n");
+        return;
+    }
+
+    // 如果是单账户统计，简化标题
+    if single_account && account_stats.len() == 1 {
+        let stats = &account_stats[0];
+        let display_name = if show_ids {
+            &stats.account_id
+        } else {
+            &stats.account_name
+        };
+        println!("\n📊 账户「{}」统计\n", display_name);
+    } else {
+        println!("\n📊 账户统计\n");
+    }
+
+    let mut table = Table::new();
+    table.set_header(vec!["账户", "总收入", "总支出", "净流入", "交易笔数"]);
+
+    // 计算总计
+    let mut total_income = Decimal::ZERO;
+    let mut total_expense = Decimal::ZERO;
+    let mut total_count = 0usize;
+
+    for stats in account_stats {
+        total_income += stats.total_income;
+        total_expense += stats.total_expense;
+        total_count += stats.transaction_count;
+
+        let net_color = if stats.net_flow >= Decimal::ZERO { "+" } else { "" };
+        let display_name = if show_ids {
+            &stats.account_id
+        } else {
+            &stats.account_name
+        };
+
+        table.add_row(vec![
+            display_name,
+            &format!("¥{}", stats.total_income),
+            &format!("¥{}", stats.total_expense),
+            &format!("{}{}¥{}", net_color, "", stats.net_flow),
+            &stats.transaction_count.to_string(),
+        ]);
+    }
+
+    // 添加总计行（只在多账户时显示）
+    if !single_account {
+        let net_total = total_income - total_expense;
+        let net_color = if net_total >= Decimal::ZERO { "+" } else { "" };
+        table.add_row(vec![
+            "─────────",
+            "─────────",
+            "─────────",
+            "─────────",
+            "─────────",
+        ]);
+        table.add_row(vec![
+            "总计",
+            &format!("¥{}", total_income),
+            &format!("¥{}", total_expense),
+            &format!("{}{}¥{}", net_color, "", net_total),
+            &total_count.to_string(),
+        ]);
+    }
+
+    println!("{}", table);
 }
 
 fn parse_month(month_str: &str) -> Result<(i32, u32)> {
@@ -97,6 +348,14 @@ fn parse_month(month_str: &str) -> Result<(i32, u32)> {
     }
 
     Ok((year, month))
+}
+
+/// 解析日期字符串（YYYY-MM-DD）
+fn parse_date(date_str: &str) -> Result<NaiveDate> {
+    NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+        .map_err(|_| crate::error::FinanceError::Parse(
+            format!("日期格式错误：'{}'，应为 YYYY-MM-DD", date_str)
+        ))
 }
 
 #[cfg(test)]
@@ -128,5 +387,30 @@ mod tests {
     #[test]
     fn test_parse_month_invalid_year() {
         assert!(parse_month("invalid-04").is_err());
+    }
+
+    #[test]
+    fn test_parse_date_valid() {
+        let date = parse_date("2025-04-15").unwrap();
+        assert_eq!(date.year(), 2025);
+        assert_eq!(date.month(), 4);
+        assert_eq!(date.day(), 15);
+
+        assert_eq!(parse_date("2024-12-31").unwrap().to_string(), "2024-12-31");
+        assert_eq!(parse_date("2023-01-01").unwrap().to_string(), "2023-01-01");
+    }
+
+    #[test]
+    fn test_parse_date_invalid_format() {
+        assert!(parse_date("2025/04/15").is_err());
+        assert!(parse_date("2025-04").is_err());     // 缺少日
+        assert!(parse_date("invalid").is_err());
+    }
+
+    #[test]
+    fn test_parse_date_invalid_date() {
+        assert!(parse_date("2025-02-30").is_err());  // 2月没有30日
+        assert!(parse_date("2025-13-01").is_err());  // 没有13月
+        assert!(parse_date("2025-00-15").is_err());  // 没有0月
     }
 }

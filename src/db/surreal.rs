@@ -269,6 +269,171 @@ impl Database {
         })
     }
 
+    /// 获取自定义日期范围统计
+    pub async fn get_stats_by_date_range(
+        &self,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+    ) -> Result<PeriodStats> {
+        // 使用 SurrealDB 的 Datetime 类型
+        let sql = "SELECT * FROM transaction WHERE timestamp >= $from AND timestamp < $to";
+        let mut result = self
+            .db
+            .query(sql)
+            .bind(("from", Datetime::from(from)))
+            .bind(("to", Datetime::from(to)))
+            .await
+            .map_err(FinanceError::Database)?;
+
+        let transactions: Vec<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+
+        let mut total_income = Decimal::ZERO;
+        let mut total_expense = Decimal::ZERO;
+        let mut category_breakdown: std::collections::HashMap<String, (String, Decimal)> =
+            std::collections::HashMap::new();
+
+        // 查询所有分类以获取名称映射
+        let categories = self.list_categories().await?;
+        let category_name_map: std::collections::HashMap<String, String> = categories
+            .into_iter()
+            .map(|c| (c.id, c.name))
+            .collect();
+
+        for tx in &transactions {
+            match tx.tx_type {
+                crate::models::TxType::Income => total_income += tx.amount,
+                crate::models::TxType::Expense => {
+                    total_expense += tx.amount;
+                    let category_name = category_name_map
+                        .get(&tx.category_id)
+                        .cloned()
+                        .unwrap_or_else(|| tx.category_id.clone());
+                    let entry = category_breakdown
+                        .entry(tx.category_id.clone())
+                        .or_insert_with(|| (category_name.clone(), Decimal::ZERO));
+                    entry.1 += tx.amount;
+                }
+                _ => {}
+            }
+        }
+
+        Ok(PeriodStats {
+            from,
+            to,
+            total_income,
+            total_expense,
+            net: total_income - total_expense,
+            transaction_count: transactions.len(),
+            category_breakdown,
+        })
+    }
+
+    /// 获取按账户统计
+    pub async fn get_stats_by_account(
+        &self,
+        account_id: Option<&str>,
+        from: Option<DateTime<Utc>>,
+        to: Option<DateTime<Utc>>,
+    ) -> Result<Vec<AccountStats>> {
+        use std::collections::HashMap;
+
+        // 构建查询条件
+        let mut conditions = vec![];
+        if from.is_some() {
+            conditions.push("timestamp >= $from".to_string());
+        }
+        if to.is_some() {
+            conditions.push("timestamp < $to".to_string());
+        }
+        if account_id.is_some() {
+            conditions.push("(account_from_id = $account_id OR account_to_id = $account_id)".to_string());
+        }
+
+        let where_clause = if conditions.is_empty() {
+            "".to_string()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+
+        let sql = format!("SELECT * FROM transaction {}", where_clause);
+        
+        let mut query = self.db.query(&sql);
+        if let Some(f) = from {
+            query = query.bind(("from", Datetime::from(f)));
+        }
+        if let Some(t) = to {
+            query = query.bind(("to", Datetime::from(t)));
+        }
+        if let Some(acc) = account_id {
+            query = query.bind(("account_id", acc.to_string()));
+        }
+
+        let mut result = query.await.map_err(FinanceError::Database)?;
+        let transactions: Vec<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+
+        // 获取所有账户信息
+        let accounts = self.list_accounts().await?;
+        let account_map: HashMap<String, String> = accounts
+            .into_iter()
+            .map(|a| (a.id, a.name))
+            .collect();
+
+        // 统计每个账户的数据
+        let mut stats_map: HashMap<String, (String, Decimal, Decimal, usize)> = HashMap::new();
+
+        for tx in &transactions {
+            // 处理来源账户
+            if let Some(from_name) = account_map.get(&tx.account_from_id) {
+                let entry = stats_map
+                    .entry(tx.account_from_id.clone())
+                    .or_insert_with(|| (from_name.clone(), Decimal::ZERO, Decimal::ZERO, 0));
+                
+                match tx.tx_type {
+                    crate::models::TxType::Expense | crate::models::TxType::Transfer => {
+                        entry.2 += tx.amount; // 支出/转出
+                    }
+                    _ => {}
+                }
+                entry.3 += 1;
+            }
+
+            // 处理目标账户
+            if let Some(to_id) = &tx.account_to_id {
+                if let Some(to_name) = account_map.get(to_id) {
+                    let entry = stats_map
+                        .entry(to_id.clone())
+                        .or_insert_with(|| (to_name.clone(), Decimal::ZERO, Decimal::ZERO, 0));
+                    
+                    match tx.tx_type {
+                        crate::models::TxType::Income | crate::models::TxType::Transfer => {
+                            entry.1 += tx.amount; // 收入/转入
+                        }
+                        _ => {}
+                    }
+                    entry.3 += 1;
+                }
+            }
+        }
+
+        // 转换为 AccountStats 列表
+        let mut account_stats: Vec<AccountStats> = stats_map
+            .into_iter()
+            .map(|(id, (name, income, expense, count))| AccountStats {
+                account_id: id,
+                account_name: name,
+                total_income: income,
+                total_expense: expense,
+                net_flow: income - expense,
+                transaction_count: count,
+            })
+            .collect();
+
+        // 按净流入排序
+        account_stats.sort_by(|a, b| b.net_flow.cmp(&a.net_flow));
+
+        Ok(account_stats)
+    }
+
     /// 删除交易记录（通过完整 RecordId）
     pub async fn delete_transaction(&self, id: RecordId) -> Result<()> {
         self.db
@@ -1067,6 +1232,30 @@ pub struct MonthlyStats {
     pub transaction_count: usize,
     /// (分类名称, 金额) 的列表，保留 ID 作为 key 用于 --show-ids 参数
     pub category_breakdown: std::collections::HashMap<String, (String, Decimal)>,
+}
+
+/// 自定义日期范围统计
+#[derive(Debug)]
+pub struct PeriodStats {
+    pub from: DateTime<Utc>,
+    pub to: DateTime<Utc>,
+    pub total_income: Decimal,
+    pub total_expense: Decimal,
+    pub net: Decimal,
+    pub transaction_count: usize,
+    /// (分类名称, 金额) 的列表，保留 ID 作为 key 用于 --show-ids 参数
+    pub category_breakdown: std::collections::HashMap<String, (String, Decimal)>,
+}
+
+/// 账户统计
+#[derive(Debug)]
+pub struct AccountStats {
+    pub account_id: String,
+    pub account_name: String,
+    pub total_income: Decimal,
+    pub total_expense: Decimal,
+    pub net_flow: Decimal,
+    pub transaction_count: usize,
 }
 
 /// 数据迁移统计
