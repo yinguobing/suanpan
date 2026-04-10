@@ -315,13 +315,13 @@ CLI 通过结构化参数接收交易信息，直接录入无需确认：
 
 ```bash
 # 添加一笔支出（分类使用路径格式）
-finance add -a 35 -f 支付宝 -t expense -c "餐饮/午餐" -d "午餐"
+suanpan add -a 35 -f 支付宝 -t expense -c "餐饮/午餐" -d "午餐"
 
 # 添加一笔收入（分类使用路径格式）
-finance add -a 8500 -t income -f 公司 -c "收入/工资" -d "三月工资"
+suanpan add -a 8500 -t income -f 公司 -c "收入/工资" -d "三月工资"
 
 # 添加转账记录
-finance add -a 1000 -t transfer -f 招行卡 -o 支付宝 -c "转账"
+suanpan add -a 1000 -t transfer -f 招行卡 -o 支付宝 -c "转账"
 ```
 
 参数说明：
@@ -338,75 +338,75 @@ finance add -a 1000 -t transfer -f 招行卡 -o 支付宝 -c "转账"
 
 ```bash
 # 添加交易记录（结构化参数，分类使用路径）
-finance add -a 35 -f 支付宝 -t expense -c "餐饮/午餐" -d "午餐"
+suanpan add -a 35 -f 支付宝 -t expense -c "餐饮/午餐" -d "午餐"
 
 # 移除交易记录（通过短 ID，支持批量）
-finance remove f4sp877fxbwc
-finance remove f4sp877fxbwc abc123dexy78 xyz789gh1234
+suanpan remove f4sp877fxbwc
+suanpan remove f4sp877fxbwc abc123dexy78 xyz789gh1234
 
 # 更新交易记录（通过短 ID，只更新指定字段）
-finance update f4sp877fxbwc -a 40 -d "午餐+饮料"
+suanpan update f4sp877fxbwc -a 40 -d "午餐+饮料"
 
 # 列出最近流水（显示完整时间，ID 在末尾）
-finance list --limit 20
+suanpan list --limit 20
 
 # 按月统计
-finance stats --month 2025-04
+suanpan stats --month 2025-04
 
 # 按分类统计（支持层级汇总）
-finance stats --by-category
+suanpan stats --by-category
 
 # ========== 账户管理命令 ==========
 
 # 列出所有账户
-finance account list
+suanpan account list
 
 # 添加账户（ID 自动生成）
-finance account add <名称> -a <类型>
-finance account add "支付宝" -a e-wallet
+suanpan account add <名称> -a <类型>
+suanpan account add "支付宝" -a e-wallet
 
 # 添加子账户（如信用卡副卡、理财子账户）
-finance account add "招招理财" -a investment --parent acc_cmb
+suanpan account add "招招理财" -a investment --parent acc_cmb
 
 # 重命名账户
-finance account rename <ID> <新名称>
-finance account rename acc_alipay "Alipay"
+suanpan account rename <ID> <新名称>
+suanpan account rename acc_alipay "Alipay"
 
 # 移除账户（需确保无流水关联、无子账户）
-finance account remove <ID>
+suanpan account remove <ID>
 
 # ========== 标签管理命令 ==========
 
 # 列出所有标签
-finance tag list
+suanpan tag list
 
 # 添加标签（ID 自动生成）
-finance tag add <名称> [--color <颜色>]
-finance tag add "2026-Q1" --color "#FF0000"
+suanpan tag add <名称> [--color <颜色>]
+suanpan tag add "2026-Q1" --color "#FF0000"
 
 # 重命名标签
-finance tag rename <ID或名称> <新名称>
-finance tag rename tag_q1 "第一季度"
+suanpan tag rename <ID或名称> <新名称>
+suanpan tag rename tag_q1 "第一季度"
 
 # 移除标签（会自动从所有流水移除关联）
-finance tag remove <ID或名称>
+suanpan tag remove <ID或名称>
 
 # ========== 分类管理命令 ==========
 
 # 查看分类树
-finance category tree
+suanpan category tree
 
 # 添加分类（指定完整路径，各级分类自动创建）
-finance category add <路径>
-finance category add "餐饮/午餐/食堂"
+suanpan category add <路径>
+suanpan category add "餐饮/午餐/食堂"
 
 # 重命名分类（自动级联更新子分类路径）
-finance category rename <路径或ID> <新名称>
-finance category rename "餐饮" "吃饭"
+suanpan category rename <路径或ID> <新名称>
+suanpan category rename "餐饮" "吃饭"
 
 # 移除分类（需确保无流水关联）
-finance category remove <路径或ID>
-finance category remove "餐饮/午餐"
+suanpan category remove <路径或ID>
+suanpan category remove "餐饮/午餐"
 ```
 
 **List 输出格式：**
@@ -432,7 +432,7 @@ finance category remove "餐饮/午餐"
 ## 7. 数据存储
 
 ### 7.1 存储位置
-- **默认路径**: `~/.local/share/finance-cli/`
+- **默认路径**: `~/.local/share/suanpan/`
 - **数据库文件**: `data.db`
 - **配置文件**: `config.toml`
 
