@@ -362,14 +362,13 @@ fn parse_suishouji_sheet(rows: &[Vec<Data>]) -> Result<Vec<ParsedTransaction>> {
             _ => TxType::Expense,
         };
 
-        // 解析金额（随手记金额可能有正负号）
+        // 解析金额（随手记金额可能有正负号，负数表示退款）
         let amount: Decimal = amount_str
             .replace("¥", "")
             .replace("￥", "")
             .replace(",", "")
             .parse()
             .map_err(|_| crate::error::FinanceError::Parse(format!("无法解析金额: {}", amount_str)))?;
-        let amount = amount.abs();
 
         // 账户1（来源账户）
         let account_from = get_str("account1").unwrap_or_else(|| "现金".to_string());
@@ -589,7 +588,7 @@ fn parse_amount_and_type(amount_str: &str, type_hint: Option<&str>) -> Result<(D
         }
     };
 
-    Ok((amount.abs(), tx_type))
+    Ok((amount, tx_type))
 }
 
 #[cfg(test)]
@@ -612,17 +611,116 @@ mod tests {
 
     #[test]
     fn test_parse_amount_and_type() {
+        use rust_decimal_macros::dec;
+
         // 普通金额
         let (amount, tx_type) = parse_amount_and_type("100.50", Some("支出")).unwrap();
-        assert_eq!(amount, Decimal::new(10050, 2));
+        assert_eq!(amount, dec!(100.50));
         assert!(matches!(tx_type, TxType::Expense));
 
         // 带货币符号
         let (amount, _) = parse_amount_and_type("¥1,234.56", None).unwrap();
-        assert_eq!(amount, Decimal::new(123456, 2));
+        assert_eq!(amount, dec!(1234.56));
 
         // 收入
         let (_, tx_type) = parse_amount_and_type("5000", Some("收入")).unwrap();
         assert!(matches!(tx_type, TxType::Income));
+    }
+
+    /// 测试退款处理：负数金额应保持原类型，用于表示退款
+    #[test]
+    fn test_refund_handling_in_suishouji() {
+        use calamine::Data;
+        use rust_decimal_macros::dec;
+
+        // 模拟随手记格式的数据行：支出退款（负数金额）
+        let refund_expense_rows = vec![
+            vec![
+                Data::String("日期".to_string()),
+                Data::String("交易类型".to_string()),
+                Data::String("金额".to_string()),
+                Data::String("账户1".to_string()),
+                Data::String("分类".to_string()),
+            ],
+            vec![
+                Data::String("2025-04-10 14:30".to_string()),
+                Data::String("支出".to_string()),
+                Data::String("-100.00".to_string()), // 支出退款：负数
+                Data::String("支付宝".to_string()),
+                Data::String("购物".to_string()),
+            ],
+        ];
+
+        let result = parse_suishouji_sheet(&refund_expense_rows).unwrap();
+        assert_eq!(result.len(), 1);
+        
+        // 验证：支出退款应保持支出类型，金额为负数
+        let tx = &result[0];
+        assert_eq!(tx.amount, dec!(-100.00), "支出退款应保持负金额");
+        assert!(matches!(tx.tx_type, TxType::Expense), "支出退款应保持支出类型");
+
+        // 模拟收入退款（负数金额）
+        let refund_income_rows = vec![
+            vec![
+                Data::String("日期".to_string()),
+                Data::String("交易类型".to_string()),
+                Data::String("金额".to_string()),
+                Data::String("账户1".to_string()),
+                Data::String("分类".to_string()),
+            ],
+            vec![
+                Data::String("2025-04-10 14:30".to_string()),
+                Data::String("收入".to_string()),
+                Data::String("-500.00".to_string()), // 收入退款：负数
+                Data::String("工资卡".to_string()),
+                Data::String("工资".to_string()),
+            ],
+        ];
+
+        let result = parse_suishouji_sheet(&refund_income_rows).unwrap();
+        assert_eq!(result.len(), 1);
+        
+        // 验证：收入退款应保持收入类型，金额为负数
+        let tx = &result[0];
+        assert_eq!(tx.amount, dec!(-500.00), "收入退款应保持负金额");
+        assert!(matches!(tx.tx_type, TxType::Income), "收入退款应保持收入类型");
+
+        // 测试正常正数金额不受影响
+        let normal_rows = vec![
+            vec![
+                Data::String("日期".to_string()),
+                Data::String("交易类型".to_string()),
+                Data::String("金额".to_string()),
+                Data::String("账户1".to_string()),
+                Data::String("分类".to_string()),
+            ],
+            vec![
+                Data::String("2025-04-10 14:30".to_string()),
+                Data::String("支出".to_string()),
+                Data::String("50.00".to_string()), // 正常支出
+                Data::String("现金".to_string()),
+                Data::String("餐饮".to_string()),
+            ],
+        ];
+
+        let result = parse_suishouji_sheet(&normal_rows).unwrap();
+        assert_eq!(result.len(), 1);
+        let tx = &result[0];
+        assert_eq!(tx.amount, dec!(50.00), "正常支出应保持正金额");
+        assert!(matches!(tx.tx_type, TxType::Expense), "正常支出应保持支出类型");
+    }
+
+    #[test]
+    fn test_parse_amount_and_type_with_negative() {
+        use rust_decimal_macros::dec;
+
+        // 测试负数金额被保留
+        let (amount, tx_type) = parse_amount_and_type("-100.50", Some("支出")).unwrap();
+        assert_eq!(amount, dec!(-100.50), "负数金额应被保留");
+        assert!(matches!(tx_type, TxType::Expense));
+
+        // 正数金额
+        let (amount, _) = parse_amount_and_type("100.50", Some("支出")).unwrap();
+        assert_eq!(amount, dec!(100.50), "正数金额应被保留");
     }
 }
