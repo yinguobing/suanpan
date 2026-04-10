@@ -38,12 +38,12 @@
 - ✅ 数据清洗和去重。基于时间+金额+账户+描述的重复检测，支持 `--dry-run` 预览和 `--skip-dedup` 跳过。
 
 ### 阶段三：数据分析（进行中）
-- ⬜ 高级统计
-  - 按时间段对比（环比、同比）
-  - 按账户统计余额和流水
-  - 按分类层级汇总（支持多级分类）
-  - 自定义时间范围统计
-  - 趋势分析（日/周/月/季度/年）
+- ✅ 高级统计（部分完成）
+  - ✅ 自定义时间范围统计: `suanpan stats --from YYYY-MM-DD --to YYYY-MM-DD`
+  - ✅ 按账户统计: `suanpan stats --by-account` / `--account <ID>`
+  - ⬜ 按分类层级汇总（支持多级分类）
+  - ⬜ 趋势分析（日/周/月/季度/年）
+  - ⬜ 按时间段对比（环比、同比）
 - ⬜ 查询增强
   - 模糊搜索描述和备注
   - 组合筛选（时间+分类+账户+金额范围）
@@ -355,6 +355,18 @@ suanpan stats --month 2025-04
 
 # 按分类统计（支持层级汇总）
 suanpan stats --by-category
+
+# 自定义日期范围统计
+suanpan stats --from 2025-01-01 --to 2025-03-31
+suanpan stats --from 2025-01-01 --to 2025-03-31 --by-category
+
+# 按账户统计
+suanpan stats --by-account
+suanpan stats --by-account --month 2025-04
+
+# 指定账户统计
+suanpan stats --account 支付宝
+suanpan stats --account 支付宝 --from 2025-01-01 --to 2025-01-31
 
 # ========== 账户管理命令 ==========
 
