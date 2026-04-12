@@ -21,8 +21,6 @@
 | 一 | MVP 基础功能 | ✅ 已完成 | [docs/phases/phase-01-core.md](./docs/phases/phase-01-core.md) |
 | 二 | 数据整合 | ✅ 已完成 | [docs/phases/phase-02-import.md](./docs/phases/phase-02-import.md) |
 | 三 | 数据分析 | ✅ 已完成 | [docs/phases/phase-03-analysis.md](./docs/phases/phase-03-analysis.md) |
-| 四 | 可视化与预算 | 📝 计划中 | [docs/phases/phase-04-viz.md](./docs/phases/phase-04-viz.md) |
-| 五 | 智能分析 | 📝 计划中 | [docs/phases/phase-05-ai.md](./docs/phases/phase-05-ai.md) |
 
 ## 核心理念
 
