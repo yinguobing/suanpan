@@ -221,3 +221,62 @@ suanpan category remove "餐饮/午餐"
 - **短 ID**：显示 Record ID 的前 12 位，平衡可读性与唯一性
 - **移除/更新**：使用短 ID 即可，命令内部使用完整 ID 匹配
 - **空值显示**：`-` 表示该字段为空
+
+## 6.4 模糊搜索使用说明
+
+模糊搜索支持对交易备注（description）字段进行不区分大小写的子串匹配。
+
+### 基本用法
+
+```bash
+# 搜索包含"午餐"的交易
+suanpan list --search "午餐"
+
+# 搜索包含"鸡蛋"的交易（支持部分匹配）
+suanpan list --search "鸡蛋"
+
+# 组合时间范围和搜索
+suanpan list --from 2026-01-01 --to 2026-01-31 --search "地铁"
+```
+
+### ⚠️ 注意事项
+
+**1. --limit 参数与模糊搜索的交互**
+
+模糊搜索是在数据库查询完成后，在内存中对结果进行过滤。因此 `--limit` 参数可能会在过滤前截断数据，导致搜索结果为空或不全。
+
+```bash
+# ❌ 可能返回空结果（如果前10条没有匹配项）
+suanpan list --search "鸡蛋" --limit 10
+
+# ✅ 正确做法：增大 limit 或使用时间范围缩小查询范围
+suanpan list --search "鸡蛋" --limit 500
+suanpan list --from 2026-01-01 --to 2026-01-31 --search "鸡蛋"
+```
+
+**建议**：使用模糊搜索时，建议设置较大的 `--limit` 值（如 500 或 1000），或配合 `--from/--to` 时间范围使用。
+
+**2. 搜索范围**
+
+模糊搜索目前仅支持搜索**备注（description）**字段，不支持搜索分类名称或账户名称。如需按分类筛选，请使用 `--category` 参数。
+
+**3. 大小写不敏感**
+
+搜索自动忽略大小写，以下命令效果相同：
+
+```bash
+suanpan list --search "XBOX"
+suanpan list --search "xbox"
+suanpan list --search "Xbox"
+```
+
+**4. 部分匹配**
+
+搜索支持子串匹配，无需输入完整内容：
+
+```bash
+# 备注为"XBOX手柄摇杆头更换"，以下搜索都能匹配：
+suanpan list --search "XBOX"
+suanpan list --search "手柄"
+suanpan list --search "摇杆"
+```
