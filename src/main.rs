@@ -3,7 +3,7 @@ use clap::Parser;
 use dirs::data_dir;
 use std::path::PathBuf;
 
-use suanpan::commands::{account, add, category, import, list, migrate, remove, report, stats, tag, update, Cli, Commands};
+use suanpan::commands::{account, add, category, compare, import, list, migrate, remove, report, stats, tag, trend, update, Cli, Commands};
 use suanpan::db::surreal::Database;
 
 #[tokio::main]
@@ -23,6 +23,7 @@ async fn main() -> Result<()> {
         Commands::Account { command } => account::execute(&db, command).await?,
         Commands::Add(args) => add::execute(&db, args).await?,
         Commands::Category { command } => category::execute(&db, command).await?,
+        Commands::Compare(args) => compare::execute(&db, args).await?,
         Commands::Import(args) => import::execute(&db, args).await?,
         Commands::List(args) => list::execute(&db, args).await?,
         Commands::Migrate(args) => migrate::execute(&db, args).await?,
@@ -30,6 +31,7 @@ async fn main() -> Result<()> {
         Commands::Report(args) => report::execute(&db, args).await?,
         Commands::Stats(args) => stats::execute(&db, args).await?,
         Commands::Tag { command } => tag::execute(&db, command).await?,
+        Commands::Trend(args) => trend::execute(&db, args).await?,
         Commands::Update(args) => update::execute(&db, args).await?,
     }
 

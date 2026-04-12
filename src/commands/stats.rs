@@ -3,7 +3,7 @@ use clap::Args;
 use comfy_table::Table;
 use rust_decimal::Decimal;
 
-use crate::db::surreal::{Database, PeriodStats};
+use crate::db::surreal::{Database, HierarchicalCategoryStats, PeriodStats};
 use crate::db::MonthlyStats;
 use crate::error::Result;
 
@@ -113,6 +113,58 @@ pub async fn execute(db: &Database, args: StatsArgs) -> Result<()> {
         return Ok(());
     }
 
+    // 处理按分类层级统计
+    if args.by_category {
+        let (from_dt, to_dt, title) = if args.from.is_some() {
+            // 自定义日期范围
+            let from_date = parse_date(args.from.as_ref().unwrap())?;
+            let to_date = match &args.to {
+                Some(to_str) => parse_date(to_str)?,
+                None => Local::now().date_naive(),
+            };
+
+            if from_date > to_date {
+                return Err(crate::error::FinanceError::Validation(
+                    "起始日期不能晚于结束日期".to_string(),
+                ));
+            }
+
+            let from_dt = from_date.and_hms_opt(0, 0, 0).unwrap().and_utc();
+            let to_dt = to_date.and_hms_opt(23, 59, 59).unwrap().and_utc();
+
+            let title = if from_date == to_date {
+                format!("{} 分类统计", from_date)
+            } else {
+                format!("{} 至 {} 分类统计", from_date, to_date)
+            };
+            (Some(from_dt), Some(to_dt), title)
+        } else if args.month.is_some() {
+            // 指定月份
+            let (year, month) = parse_month(args.month.as_ref().unwrap())?;
+            let start = NaiveDate::from_ymd_opt(year, month, 1)
+                .ok_or_else(|| crate::error::FinanceError::Validation("无效的日期".to_string()))?;
+            let end = if month == 12 {
+                NaiveDate::from_ymd_opt(year + 1, 1, 1)
+            } else {
+                NaiveDate::from_ymd_opt(year, month + 1, 1)
+            }
+            .ok_or_else(|| crate::error::FinanceError::Validation("无效的日期".to_string()))?;
+
+            let from_dt = start.and_hms_opt(0, 0, 0).unwrap().and_utc();
+            let to_dt = end.and_hms_opt(0, 0, 0).unwrap().and_utc();
+
+            let title = format!("{}年{}月 分类统计", year, month);
+            (Some(from_dt), Some(to_dt), title)
+        } else {
+            // 全部时间
+            (None, None, "全部分类统计".to_string())
+        };
+
+        let stats = db.get_hierarchical_category_stats(from_dt, to_dt).await?;
+        print_hierarchical_category_stats(&stats, &title, args.show_ids);
+        return Ok(());
+    }
+
     // 判断使用自定义日期范围还是月度统计
     let use_date_range = args.from.is_some();
 
@@ -178,8 +230,12 @@ fn print_monthly_stats(stats: &MonthlyStats, by_category: bool, show_ids: bool) 
     println!("{}", table);
 
     // 分类统计
-    if by_category && !stats.category_breakdown.is_empty() {
-        print_category_breakdown(&stats.category_breakdown, stats.total_expense, show_ids);
+    if by_category {
+        if !stats.category_breakdown.is_empty() {
+            print_category_breakdown(&stats.category_breakdown, stats.total_expense, show_ids);
+        } else {
+            println!("\n📈 暂无分类数据");
+        }
     }
 }
 
@@ -248,6 +304,88 @@ fn print_category_breakdown(
         ]);
     }
     println!("{}", cat_table);
+}
+
+/// 打印层级分类统计
+fn print_hierarchical_category_stats(
+    stats: &[HierarchicalCategoryStats],
+    title: &str,
+    show_ids: bool,
+) {
+    println!("\n📊 {}\n", title);
+
+    // 检查是否有有效数据（非零金额）
+    let has_data = stats.iter().any(|s| s.total_amount != Decimal::ZERO);
+    if !has_data {
+        println!("暂无支出数据");
+        return;
+    }
+
+    let mut table = Table::new();
+    table.set_header(vec!["分类", "直接金额", "汇总金额", "占比"]);
+
+    // 递归添加行
+    fn add_rows(
+        table: &mut Table,
+        stats: &[HierarchicalCategoryStats],
+        show_ids: bool,
+        indent: usize,
+    ) {
+        for stat in stats {
+            // 跳过金额为0的分类
+            if stat.total_amount == Decimal::ZERO && stat.direct_amount == Decimal::ZERO {
+                continue;
+            }
+
+            // 缩进前缀
+            let prefix = "  ".repeat(indent);
+            let display_name = if show_ids {
+                format!("{}{}", prefix, stat.category_id)
+            } else {
+                format!("{}{}", prefix, stat.category_name)
+            };
+
+            // 直接金额（不为0时显示，负数表示退款）
+            let direct_str = if stat.direct_amount != Decimal::ZERO {
+                format!("¥{}", stat.direct_amount)
+            } else {
+                "-".to_string()
+            };
+
+            // 汇总金额（与直接金额不同或有子分类时显示）
+            let total_str = if stat.total_amount != stat.direct_amount || !stat.children.is_empty() {
+                format!("¥{}", stat.total_amount)
+            } else {
+                "-".to_string()
+            };
+
+            // 占比显示（正数为支出，负数为退款）
+            let percentage_str = if stat.percentage < Decimal::ZERO {
+                format!("{}%", stat.percentage)
+            } else {
+                format!("{}%", stat.percentage)
+            };
+
+            table.add_row(vec![
+                display_name,
+                direct_str,
+                total_str,
+                percentage_str,
+            ]);
+
+            // 递归添加子分类
+            if !stat.children.is_empty() {
+                add_rows(table, &stat.children, show_ids, indent + 1);
+            }
+        }
+    }
+
+    add_rows(&mut table, stats, show_ids, 0);
+    println!("{}", table);
+
+    // 打印总计（净支出，已扣除退款）
+    let total: Decimal = stats.iter().map(|s| s.total_amount).sum();
+    println!("\n总支出: ¥{}", total);
 }
 
 /// 打印账户统计结果

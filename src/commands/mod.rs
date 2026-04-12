@@ -3,6 +3,7 @@ use clap::{Parser, Subcommand};
 pub mod account;
 pub mod add;
 pub mod category;
+pub mod compare;
 pub mod import;
 pub mod list;
 pub mod migrate;
@@ -10,11 +11,13 @@ pub mod remove;
 pub mod report;
 pub mod stats;
 pub mod tag;
+pub mod trend;
 pub mod update;
 
 use account::AccountCommands;
 use add::AddArgs;
 use category::CategoryCommands;
+use compare::CompareArgs;
 use import::ImportArgs;
 use list::ListArgs;
 use migrate::MigrateArgs;
@@ -22,6 +25,7 @@ use remove::RemoveArgs;
 use report::ReportArgs;
 use stats::StatsArgs;
 use tag::TagCommands;
+use trend::TrendArgs;
 use update::UpdateArgs;
 
 /// 国冰财务管理系统 CLI
@@ -56,6 +60,8 @@ pub enum Commands {
     Remove(RemoveArgs),
     /// 生成可视化报表
     Report(ReportArgs),
+    /// 对比分析（环比/同比）
+    Compare(CompareArgs),
     /// 统计报表
     Stats(StatsArgs),
     /// 标签管理
@@ -63,6 +69,8 @@ pub enum Commands {
         #[command(subcommand)]
         command: TagCommands,
     },
+    /// 趋势分析
+    Trend(TrendArgs),
     /// 更新交易记录
     Update(UpdateArgs),
     /// 导入交易记录（支持 XLS/XLSX/CSV）

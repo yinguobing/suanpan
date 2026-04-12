@@ -1,4 +1,4 @@
-use chrono::{DateTime, NaiveDate, Utc};
+use chrono::{DateTime, Datelike, NaiveDate, Utc};
 use surrealdb::Datetime;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
@@ -195,6 +195,167 @@ impl Database {
             .map_err(FinanceError::Database)?;
 
         let transactions: Vec<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+        Ok(transactions)
+    }
+
+    /// 组合查询交易记录
+    #[allow(clippy::too_many_arguments)]
+    pub async fn query_transactions(
+        &self,
+        from: Option<&str>,
+        to: Option<&str>,
+        category: Option<&str>,
+        tx_type: Option<&str>,
+        account: Option<&str>,
+        search: Option<&str>,
+        min_amount: Option<Decimal>,
+        max_amount: Option<Decimal>,
+        limit: Option<usize>,
+    ) -> Result<Vec<Transaction>> {
+        let mut conditions = vec![];
+        let mut has_from = false;
+        let mut has_to = false;
+        let mut has_category = false;
+        let mut has_tx_type = false;
+        let mut has_account = false;
+        let mut has_min_amount = false;
+        let mut has_max_amount = false;
+
+        // 时间范围
+        let from_date = if let Some(from_str) = from {
+            let dt = parse_date(from_str)?
+                .and_hms_opt(0, 0, 0)
+                .unwrap()
+                .and_utc();
+            conditions.push("timestamp >= $from".to_string());
+            has_from = true;
+            Some(dt)
+        } else {
+            None
+        };
+
+        let to_date = if let Some(to_str) = to {
+            let dt = parse_date(to_str)?
+                .and_hms_opt(23, 59, 59)
+                .unwrap()
+                .and_utc();
+            conditions.push("timestamp <= $to".to_string());
+            has_to = true;
+            Some(dt)
+        } else {
+            None
+        };
+
+        // 分类筛选
+        let cat_id = if let Some(cat) = category {
+            // 先尝试查找分类ID
+            let cats = self.list_categories().await?;
+            let id = cats
+                .iter()
+                .find(|c| c.id == cat || c.name == cat || c.full_path == cat)
+                .map(|c| c.id.clone())
+                .unwrap_or_else(|| cat.to_string());
+            conditions.push("category_id = $category".to_string());
+            has_category = true;
+            Some(id)
+        } else {
+            None
+        };
+
+        // 类型筛选
+        let tx_type_val = if let Some(tx_t) = tx_type {
+            conditions.push("tx_type = $tx_type".to_string());
+            has_tx_type = true;
+            Some(tx_t.to_string())
+        } else {
+            None
+        };
+
+        // 账户筛选
+        let acc_id = if let Some(acc) = account {
+            // 先尝试查找账户ID
+            let id = if let Some(account) = self.get_account(acc).await? {
+                account.id
+            } else if let Some(account) = self.find_account_by_name(acc).await? {
+                account.id
+            } else {
+                acc.to_string()
+            };
+            conditions.push("(account_from_id = $account OR account_to_id = $account)".to_string());
+            has_account = true;
+            Some(id)
+        } else {
+            None
+        };
+
+        // 金额范围
+        if min_amount.is_some() {
+            conditions.push("amount >= $min_amount".to_string());
+            has_min_amount = true;
+        }
+
+        if max_amount.is_some() {
+            conditions.push("amount <= $max_amount".to_string());
+            has_max_amount = true;
+        }
+
+        // 构建 SQL
+        let where_clause = if conditions.is_empty() {
+            "".to_string()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+
+        let limit_clause = limit
+            .map(|l| format!(" LIMIT {}", l))
+            .unwrap_or_default();
+
+        let sql = format!(
+            "SELECT * FROM transaction {} ORDER BY timestamp DESC{}",
+            where_clause, limit_clause
+        );
+
+        // 绑定参数
+        let mut query = self.db.query(&sql);
+        if has_from {
+            query = query.bind(("from", Datetime::from(from_date.unwrap())));
+        }
+        if has_to {
+            query = query.bind(("to", Datetime::from(to_date.unwrap())));
+        }
+        if has_category {
+            query = query.bind(("category", cat_id.unwrap()));
+        }
+        if has_tx_type {
+            query = query.bind(("tx_type", tx_type_val.unwrap()));
+        }
+        if has_account {
+            query = query.bind(("account", acc_id.unwrap()));
+        }
+        if has_min_amount {
+            query = query.bind(("min_amount", min_amount.unwrap()));
+        }
+        if has_max_amount {
+            query = query.bind(("max_amount", max_amount.unwrap()));
+        }
+
+        let mut result = query.await.map_err(FinanceError::Database)?;
+        let mut transactions: Vec<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+
+        // 模糊搜索（在内存中过滤，因为 SurrealDB 的字符串包含查询语法较复杂）
+        if let Some(search_str) = search {
+            let search_lower = search_str.to_lowercase();
+            transactions.retain(|tx| {
+                let desc_match = tx
+                    .description
+                    .as_ref()
+                    .map(|d| d.to_lowercase().contains(&search_lower))
+                    .unwrap_or(false);
+                // 也可以搜索分类名称（需要额外查询）
+                desc_match
+            });
+        }
+
         Ok(transactions)
     }
 
@@ -432,6 +593,315 @@ impl Database {
         account_stats.sort_by(|a, b| b.net_flow.cmp(&a.net_flow));
 
         Ok(account_stats)
+    }
+
+    /// 获取层级分类统计
+    /// 
+    /// 返回按层级组织的分类统计，子分类金额会自动汇总到父分类
+    pub async fn get_hierarchical_category_stats(
+        &self,
+        from: Option<DateTime<Utc>>,
+        to: Option<DateTime<Utc>>,
+    ) -> Result<Vec<HierarchicalCategoryStats>> {
+        use std::collections::HashMap;
+
+        // 1. 获取所有分类
+        let categories = self.list_categories().await?;
+        
+        // 构建分类ID到分类信息的映射
+        let mut category_map: HashMap<String, (String, Option<String>, u32)> = HashMap::new();
+        // 构建父分类到子分类列表的映射
+        let mut children_map: HashMap<String, Vec<String>> = HashMap::new();
+        
+        for cat in &categories {
+            category_map.insert(
+                cat.id.clone(),
+                (cat.name.clone(), cat.parent_id.clone(), cat.level),
+            );
+            
+            if let Some(ref parent_id) = cat.parent_id {
+                children_map
+                    .entry(parent_id.clone())
+                    .or_default()
+                    .push(cat.id.clone());
+            }
+        }
+
+        // 2. 获取指定时间范围内的交易
+        let mut conditions = vec![];
+        if from.is_some() {
+            conditions.push("timestamp >= $from".to_string());
+        }
+        if to.is_some() {
+            conditions.push("timestamp < $to".to_string());
+        }
+
+        let where_clause = if conditions.is_empty() {
+            "".to_string()
+        } else {
+            format!("WHERE {}", conditions.join(" AND "))
+        };
+        let sql = format!("SELECT * FROM transaction {}", where_clause);
+
+        let mut query = self.db.query(&sql);
+        if let Some(f) = from {
+            query = query.bind(("from", Datetime::from(f)));
+        }
+        if let Some(t) = to {
+            query = query.bind(("to", Datetime::from(t)));
+        }
+
+        let mut result = query.await.map_err(FinanceError::Database)?;
+        let transactions: Vec<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+
+        // 3. 按分类ID汇总支出金额（只统计 Expense 类型）
+        let mut direct_amounts: HashMap<String, Decimal> = HashMap::new();
+        for tx in &transactions {
+            if matches!(tx.tx_type, crate::models::TxType::Expense) {
+                *direct_amounts.entry(tx.category_id.clone()).or_insert(Decimal::ZERO) += tx.amount;
+            }
+        }
+
+        // 4. 计算总支出（用于计算百分比）
+        let total_expense: Decimal = direct_amounts.values().sum();
+        let total_expense_abs = total_expense.abs();
+
+        // 5. 构建层级统计（递归函数）
+        fn build_hierarchical_stats(
+            category_id: &str,
+            category_map: &HashMap<String, (String, Option<String>, u32)>,
+            children_map: &HashMap<String, Vec<String>>,
+            direct_amounts: &HashMap<String, Decimal>,
+            total_expense_abs: Decimal,
+        ) -> Option<HierarchicalCategoryStats> {
+            let (name, _parent_id, level) = category_map.get(category_id)?;
+            
+            // 获取直接金额（包含负数退款）
+            let direct_amount = *direct_amounts.get(category_id).unwrap_or(&Decimal::ZERO);
+
+            // 递归构建子分类统计
+            let mut children = Vec::new();
+            let mut total_amount = direct_amount;
+
+            if let Some(child_ids) = children_map.get(category_id) {
+                for child_id in child_ids {
+                    if let Some(child_stats) = build_hierarchical_stats(
+                        child_id,
+                        category_map,
+                        children_map,
+                        direct_amounts,
+                        total_expense_abs,
+                    ) {
+                        total_amount += child_stats.total_amount;
+                        children.push(child_stats);
+                    }
+                }
+            }
+
+            // 按金额绝对值降序排序子分类
+            children.sort_by(|a, b| b.total_amount.abs().cmp(&a.total_amount.abs()));
+
+            // 计算完整路径
+            let full_path = build_full_path(category_id, category_map);
+
+            // 百分比基于绝对值计算
+            let percentage = if total_expense_abs > Decimal::ZERO {
+                (total_amount / total_expense_abs * Decimal::from(100)).round_dp(1)
+            } else {
+                Decimal::ZERO
+            };
+
+            Some(HierarchicalCategoryStats {
+                category_id: category_id.to_string(),
+                category_name: name.clone(),
+                full_path,
+                level: *level,
+                direct_amount,
+                total_amount,
+                percentage,
+                children,
+            })
+        }
+
+        // 辅助函数：构建完整路径
+        fn build_full_path(
+            category_id: &str,
+            category_map: &HashMap<String, (String, Option<String>, u32)>,
+        ) -> String {
+            let mut parts = Vec::new();
+            let mut current_id = Some(category_id.to_string());
+            
+            // 收集从当前节点到根节点的路径（反向）
+            while let Some(id) = current_id {
+                if let Some((name, parent_id, _)) = category_map.get(&id) {
+                    parts.push(name.clone());
+                    current_id = parent_id.clone();
+                } else {
+                    break;
+                }
+            }
+            
+            // 反转得到从根到当前节点的路径
+            parts.reverse();
+            parts.join("/")
+        }
+
+        // 6. 从根分类（没有父分类的）开始构建层级统计
+        let mut root_stats = Vec::new();
+        for cat in &categories {
+            if cat.parent_id.is_none() {
+                if let Some(stats) = build_hierarchical_stats(
+                    &cat.id,
+                    &category_map,
+                    &children_map,
+                    &direct_amounts,
+                    total_expense_abs,
+                ) {
+                    // 只包含有金额或子分类有金额的根分类
+                    if stats.total_amount != Decimal::ZERO || !stats.children.is_empty() {
+                        root_stats.push(stats);
+                    }
+                }
+            }
+        }
+
+        // 7. 按总金额绝对值降序排序根分类
+        root_stats.sort_by(|a, b| b.total_amount.abs().cmp(&a.total_amount.abs()));
+
+        Ok(root_stats)
+    }
+
+    /// 获取趋势统计
+    pub async fn get_trend_stats(
+        &self,
+        period: TrendPeriod,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+    ) -> Result<Vec<TrendStats>> {
+        use std::collections::HashMap;
+
+        // 查询时间范围内的交易
+        let sql = "SELECT * FROM transaction WHERE timestamp >= $from AND timestamp <= $to ORDER BY timestamp ASC";
+        let mut result = self
+            .db
+            .query(sql)
+            .bind(("from", Datetime::from(from)))
+            .bind(("to", Datetime::from(to)))
+            .await
+            .map_err(FinanceError::Database)?;
+
+        let transactions: Vec<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+
+        // 按周期聚合
+        let mut period_data: HashMap<String, (Decimal, Decimal, usize)> = HashMap::new();
+
+        for tx in &transactions {
+            // surrealdb::Datetime -> surrealdb::sql::Datetime -> chrono::DateTime<Utc>
+            let sql_dt: surrealdb::sql::Datetime = tx.timestamp.to_owned().into_inner();
+            let chrono_ts: DateTime<Utc> = sql_dt.into();
+            let period_key = get_period_key(&chrono_ts, &period);
+            let entry = period_data.entry(period_key).or_insert((Decimal::ZERO, Decimal::ZERO, 0usize));
+
+            match tx.tx_type {
+                TxType::Income => entry.0 += tx.amount,
+                TxType::Expense => entry.1 += tx.amount,
+                _ => {}
+            }
+            entry.2 += 1;
+        }
+
+        // 生成完整的时间周期序列（包括没有数据的周期）
+        let all_periods = generate_periods(from, to, &period);
+
+        // 合并数据
+        let mut stats: Vec<TrendStats> = all_periods
+            .into_iter()
+            .map(|label| {
+                let (income, expense, count) = period_data.get(&label).copied().unwrap_or((Decimal::ZERO, Decimal::ZERO, 0));
+                TrendStats {
+                    period_label: label,
+                    income,
+                    expense,
+                    transaction_count: count,
+                }
+            })
+            .collect();
+
+        // 按时间顺序排序
+        stats.sort_by(|a, b| a.period_label.cmp(&b.period_label));
+
+        Ok(stats)
+    }
+
+    /// 获取分类趋势统计
+    pub async fn get_category_trend_stats(
+        &self,
+        period: TrendPeriod,
+        from: DateTime<Utc>,
+        to: DateTime<Utc>,
+    ) -> Result<Vec<(String, Vec<(String, Decimal)>)>> {
+        use std::collections::HashMap;
+
+        // 获取所有分类
+        let categories = self.list_categories().await?;
+        let category_map: HashMap<String, String> = categories
+            .into_iter()
+            .map(|c| (c.id, c.full_path))
+            .collect();
+
+        // 查询时间范围内的支出交易
+        let sql = "SELECT * FROM transaction WHERE timestamp >= $from AND timestamp <= $to AND tx_type = 'expense' ORDER BY timestamp ASC";
+        let mut result = self
+            .db
+            .query(sql)
+            .bind(("from", Datetime::from(from)))
+            .bind(("to", Datetime::from(to)))
+            .await
+            .map_err(FinanceError::Database)?;
+
+        let transactions: Vec<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+
+        // 按分类和周期聚合
+        // category_id -> (period_label -> amount)
+        let mut category_data: HashMap<String, HashMap<String, Decimal>> = HashMap::new();
+        // 所有周期列表
+        let mut all_periods_set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+
+        for tx in &transactions {
+            // surrealdb::Datetime -> surrealdb::sql::Datetime -> chrono::DateTime<Utc>
+            let sql_dt: surrealdb::sql::Datetime = tx.timestamp.to_owned().into_inner();
+            let chrono_ts: DateTime<Utc> = sql_dt.into();
+            let period_key = get_period_key(&chrono_ts, &period);
+            all_periods_set.insert(period_key.clone());
+
+            let category_path = category_map.get(&tx.category_id).cloned().unwrap_or_else(|| tx.category_id.clone());
+            
+            let cat_entry = category_data.entry(category_path).or_default();
+            *cat_entry.entry(period_key).or_insert(Decimal::ZERO) += tx.amount;
+        }
+
+        // 转换为返回格式
+        let all_periods: Vec<String> = all_periods_set.into_iter().collect();
+        
+        let mut result: Vec<(String, Vec<(String, Decimal)>)> = category_data
+            .into_iter()
+            .map(|(category_id, period_map)| {
+                // 为每个周期填充数据
+                let data: Vec<(String, Decimal)> = all_periods
+                    .iter()
+                    .map(|p| {
+                        let amount = period_map.get(p).copied().unwrap_or(Decimal::ZERO);
+                        (p.clone(), amount)
+                    })
+                    .collect();
+                (category_id, data)
+            })
+            .collect();
+
+        // 按分类名称排序
+        result.sort_by(|a, b| a.0.cmp(&b.0));
+
+        Ok(result)
     }
 
     /// 删除交易记录（通过完整 RecordId）
@@ -1267,6 +1737,19 @@ pub struct MigrationStats {
     pub tags_created: usize,
 }
 
+/// 层级分类统计项
+#[derive(Debug)]
+pub struct HierarchicalCategoryStats {
+    pub category_id: String,
+    pub category_name: String,
+    pub full_path: String,
+    pub level: u32,
+    pub direct_amount: Decimal,      // 直接属于该分类的金额（不含子分类）
+    pub total_amount: Decimal,       // 汇总金额（含所有子分类）
+    pub percentage: Decimal,         // 占总支出的百分比
+    pub children: Vec<HierarchicalCategoryStats>,
+}
+
 /// 旧格式交易记录（用于迁移）
 #[derive(Debug, serde::Deserialize)]
 struct OldTransaction {
@@ -1275,4 +1758,86 @@ struct OldTransaction {
     pub account_to: Option<String>,
     pub category: String,
     pub tags: Vec<String>,
+}
+
+/// 趋势周期类型
+#[derive(Debug, Clone, Copy)]
+pub enum TrendPeriod {
+    Day,
+    Week,
+    Month,
+    Quarter,
+    Year,
+}
+
+/// 趋势统计项
+#[derive(Debug)]
+pub struct TrendStats {
+    pub period_label: String,    // 周期标签，如 "2026-01" 或 "2026-W01"
+    pub income: Decimal,
+    pub expense: Decimal,
+    pub transaction_count: usize,
+}
+
+/// 根据时间戳获取周期键
+fn get_period_key(timestamp: &DateTime<Utc>, period: &TrendPeriod) -> String {
+    match period {
+        TrendPeriod::Day => timestamp.format("%Y-%m-%d").to_string(),
+        TrendPeriod::Week => {
+            let iso_week = timestamp.iso_week();
+            format!("{}-W{:02}", iso_week.year(), iso_week.week())
+        }
+        TrendPeriod::Month => timestamp.format("%Y-%m").to_string(),
+        TrendPeriod::Quarter => {
+            let quarter = (timestamp.month() - 1) / 3 + 1;
+            format!("{}-Q{}", timestamp.year(), quarter)
+        }
+        TrendPeriod::Year => timestamp.year().to_string(),
+    }
+}
+
+/// 生成完整的周期序列
+fn generate_periods(from: DateTime<Utc>, to: DateTime<Utc>, period: &TrendPeriod) -> Vec<String> {
+    let mut periods = Vec::new();
+    let mut current = from.date_naive();
+    let end = to.date_naive();
+
+    while current <= end {
+        let key = match period {
+            TrendPeriod::Day => current.format("%Y-%m-%d").to_string(),
+            TrendPeriod::Week => {
+                let dt = current.and_hms_opt(0, 0, 0).unwrap().and_utc();
+                let iso_week = dt.iso_week();
+                format!("{}-W{:02}", iso_week.year(), iso_week.week())
+            }
+            TrendPeriod::Month => current.format("%Y-%m").to_string(),
+            TrendPeriod::Quarter => {
+                let quarter = (current.month() - 1) / 3 + 1;
+                format!("{}-Q{}", current.year(), quarter)
+            }
+            TrendPeriod::Year => current.year().to_string(),
+        };
+
+        // 避免重复添加相同的周期键（如周可能跨越多天）
+        if !periods.contains(&key) {
+            periods.push(key);
+        }
+
+        // 移动到下一个周期
+        current = match period {
+            TrendPeriod::Day => current.succ_opt().unwrap_or(current),
+            TrendPeriod::Week => current.checked_add_days(chrono::Days::new(7)).unwrap_or(current),
+            TrendPeriod::Month => current.checked_add_months(chrono::Months::new(1)).unwrap_or(current),
+            TrendPeriod::Quarter => current.checked_add_months(chrono::Months::new(3)).unwrap_or(current),
+            TrendPeriod::Year => current.with_year(current.year() + 1).unwrap_or(current),
+        };
+    }
+
+    periods
+}
+
+/// 解析日期字符串（YYYY-MM-DD）
+fn parse_date(date_str: &str) -> Result<NaiveDate> {
+    NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
+        .map_err(|_| FinanceError::Parse(format!("日期格式错误：'{}'，应为 YYYY-MM-DD", date_str)))
 }

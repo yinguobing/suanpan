@@ -199,8 +199,7 @@ impl CategoryTree {
 
     /// 从数据库记录列表构建树
     /// 
-    /// 数据库记录包含 id, name, parent_id, full_path, level
-    /// 需要按 level 排序后依次添加
+    /// 注意：tree-ds 库只支持单根节点，此方法仅供单一树结构使用
     pub fn from_records(records: Vec<CategoryRecord>) -> Self {
         let mut tree = Self::new();
         
@@ -210,11 +209,16 @@ impl CategoryTree {
         
         for record in records {
             if let Some(parent_id) = record.parent_id {
-                // 子节点
-                let _ = tree.add_child(record.id, record.name, &parent_id);
+                // 子节点 - 先检查父节点是否存在
+                if tree.get(&parent_id).is_some() {
+                    let _ = tree.add_child(record.id, record.name, &parent_id);
+                }
+                // 如果父节点不存在，则跳过（数据不一致）
             } else {
-                // 根节点
-                let _ = tree.add_root(record.id, record.name);
+                // 根节点 - 只添加第一个根节点（tree-ds 限制）
+                if tree.get_root_ids().is_empty() {
+                    let _ = tree.add_root(record.id, record.name);
+                }
             }
         }
         

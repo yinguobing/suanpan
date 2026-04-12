@@ -37,23 +37,23 @@
 - ✅ 第三方数据导入。已实现随手记 XLS/XLSX/CSV 导入，支持多 sheet、自动创建账户和分类、重复检测。
 - ✅ 数据清洗和去重。基于时间+金额+账户+描述的重复检测，支持 `--dry-run` 预览和 `--skip-dedup` 跳过。
 
-### 阶段三：数据分析（进行中）
-- ✅ 高级统计（部分完成）
+### 阶段三：数据分析（已完成）
+- ✅ 高级统计
   - ✅ 自定义时间范围统计: `suanpan stats --from YYYY-MM-DD --to YYYY-MM-DD`
   - ✅ 按账户统计: `suanpan stats --by-account` / `--account <ID>`
-  - ⬜ 按分类层级汇总（支持多级分类）
-  - ⬜ 趋势分析（日/周/月/季度/年）
-  - ⬜ 按时间段对比（环比、同比）
-- ⬜ 查询增强
-  - 模糊搜索描述和备注
-  - 组合筛选（时间+分类+账户+金额范围）
-  - 导出查询结果到 CSV/Excel
+  - ✅ 按分类层级汇总: `suanpan stats --by-category`（支持多级分类树形展示）
+  - ✅ 趋势分析: `suanpan trend --period <day|week|month|quarter|year>`
+  - ✅ 时间段对比: `suanpan compare --month YYYY-MM`（环比/同比）
+- ✅ 查询增强
+  - ✅ 模糊搜索: `suanpan list --search <关键词>`
+  - ✅ 组合筛选: 支持时间+分类+账户+金额范围组合查询
+  - ✅ 导出结果: `suanpan list --output <文件路径>`（支持 CSV/文本格式）
 - ✅ 数据可视化报表
-  - 生成 HTML 报表（交互式图表）
-  - 支出分类饼图（Top 8 + 其他聚合）
-  - 收支趋势折线图（最近12个月）
-  - 每日收支柱状图
-  - 命令: `suanpan report --month YYYY-MM`
+  - ✅ 生成 HTML 报表（交互式图表）
+  - ✅ 支出分类饼图（Top 8 + 其他聚合）
+  - ✅ 收支趋势折线图（最近12个月）
+  - ✅ 每日收支柱状图
+  - ✅ 命令: `suanpan report --month YYYY-MM`
 
 ---
 
@@ -88,12 +88,16 @@ suanpan/
 │   │   └── surreal.rs       # SurrealDB 封装
 │   ├── commands/            # CLI 子命令
 │   │   ├── mod.rs
-│   │   ├── add.rs
+│   │   ├── add.rs           # 添加交易
 │   │   ├── remove.rs        # 移除交易
-│   │   ├── update.rs
-│   │   ├── list.rs
-│   │   ├── stats.rs
+│   │   ├── update.rs        # 更新交易
+│   │   ├── list.rs          # 查询交易（支持组合筛选）
+│   │   ├── stats.rs         # 统计分析
+│   │   ├── trend.rs         # 趋势分析
+│   │   ├── compare.rs       # 对比分析（环比/同比）
+│   │   ├── report.rs        # HTML 可视化报表
 │   │   ├── migrate.rs       # 数据迁移
+│   │   ├── import.rs        # 数据导入
 │   │   ├── account.rs       # 账户管理
 │   │   ├── category.rs      # 分类管理
 │   │   └── tag.rs           # 标签管理
@@ -350,6 +354,27 @@ suanpan update f4sp877fxbwc -a 40 -d "午餐+饮料"
 # 列出最近流水（显示完整时间，ID 在末尾）
 suanpan list --limit 20
 
+# 按日期范围查询
+suanpan list --from 2026-01-01 --to 2026-01-31
+
+# 按分类筛选
+suanpan list --category "餐饮"
+
+# 按账户筛选
+suanpan list --account "支付宝"
+
+# 按交易类型筛选
+suanpan list --tx-type expense
+
+# 模糊搜索描述
+suanpan list --search "地铁"
+
+# 按金额范围筛选
+suanpan list --min-amount 100 --max-amount 500
+
+# 组合筛选 + 导出 CSV
+suanpan list --from 2026-01-01 --to 2026-01-31 --search "午餐" --output lunch.csv
+
 # 按月统计
 suanpan stats --month 2025-04
 
@@ -367,6 +392,55 @@ suanpan stats --by-account --month 2025-04
 # 指定账户统计
 suanpan stats --account 支付宝
 suanpan stats --account 支付宝 --from 2025-01-01 --to 2025-01-31
+
+# ========== 趋势分析命令 ==========
+
+# 按月查看收支趋势（默认最近6个月）
+suanpan trend --period month
+
+# 查看季度趋势（指定日期范围）
+suanpan trend --period quarter --from 2025-01-01 --to 2025-12-31
+
+# 查看周趋势并按分类展示
+suanpan trend --period week --from 2026-01-01 --to 2026-01-31 --by-category
+
+# 支持的周期类型: day, week, month, quarter, year
+
+# ========== 对比分析命令 ==========
+
+# 月度对比分析（环比+同比）
+suanpan compare --month 2026-01
+
+# 仅环比对比（与上月对比）
+suanpan compare --month 2026-01 --compare-type mom
+
+# 仅同比对比（与去年同月对比）
+suanpan compare --month 2026-01 --compare-type yoy
+
+# ========== 查询增强命令 ==========
+
+# 模糊搜索描述和备注
+suanpan list --search "午餐"
+
+# 组合筛选：时间范围 + 账户 + 金额范围
+suanpan list --from 2026-01-01 --to 2026-01-31 --account "招行卡" --min-amount 100
+
+# 导出查询结果到 CSV
+suanpan list --from 2026-01-01 --to 2026-01-31 --output january.csv
+
+# 组合筛选 + 导出
+suanpan list --category "餐饮" --tx-type expense --min-amount 50 --output food_expenses.csv
+
+# ========== 可视化报表命令 ==========
+
+# 生成月度 HTML 报表（含图表）
+suanpan report --month 2026-01
+
+# 指定输出目录
+suanpan report --month 2026-01 --output ./reports
+
+# 只生成图表（不生成 HTML）
+suanpan report --month 2026-01 --charts-only
 
 # ========== 账户管理命令 ==========
 
