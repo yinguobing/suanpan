@@ -47,7 +47,7 @@ pub struct UpdateArgs {
 pub async fn execute(db: &Database, args: UpdateArgs) -> Result<()> {
     // 验证 ID 格式
     if args.id.len() != 12 {
-        println!("❌ ID '{}' 格式错误，应为 12 位字符", args.id);
+        println!("[ERR] ID '{}' 格式错误，应为 12 位字符", args.id);
         return Ok(());
     }
 
@@ -61,7 +61,7 @@ pub async fn execute(db: &Database, args: UpdateArgs) -> Result<()> {
         && args.description.is_none()
         && args.tag.is_empty()
     {
-        println!("❌ 请至少指定一个要更新的字段");
+        println!("[ERR] 请至少指定一个要更新的字段");
         println!("用法: finance update <短ID> -a 40 -d \"新描述\"");
         return Ok(());
     }
@@ -101,7 +101,7 @@ pub async fn execute(db: &Database, args: UpdateArgs) -> Result<()> {
     // 执行更新
     match db.update_by_short_id(&args.id, updates).await? {
         Some(tx) => {
-            println!("✅ 交易记录已更新:");
+            println!("[OK] 交易记录已更新:");
             println!("   ID: {:?}", tx.id);
             println!("   类型: {}", tx.tx_type);
             println!("   金额: {} {}", tx.amount, tx.currency);
@@ -119,7 +119,7 @@ pub async fn execute(db: &Database, args: UpdateArgs) -> Result<()> {
             }
         }
         None => {
-            println!("❌ 未找到 ID 为 '{}' 的交易记录", args.id);
+            println!("[ERR] 未找到 ID 为 '{}' 的交易记录", args.id);
         }
     }
 

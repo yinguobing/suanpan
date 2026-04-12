@@ -138,7 +138,7 @@ pub async fn execute(db: &Database, args: ListArgs) -> Result<()> {
     if let Some(output_path) = args.output {
         let content = generate_output(&transactions, &account_map, &category_map, args.show_ids, args.limit, &args.format);
         std::fs::write(&output_path, content)?;
-        println!("✅ 已导出 {} 条记录到: {}", transactions.len().min(args.limit), output_path);
+        println!("[OK] 已导出 {} 条记录到: {}", transactions.len().min(args.limit), output_path);
         return Ok(());
     }
 

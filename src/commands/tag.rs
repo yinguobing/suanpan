@@ -61,7 +61,7 @@ async fn list_tags(db: &Database) -> Result<()> {
         return Ok(());
     }
 
-    println!("\n🏷️ 标签列表\n");
+    println!("\n[列表] 标签列表\n");
     println!("{:<20} {:<10} {}", "ID", "颜色", "名称");
     println!("{}", "-".repeat(50));
 
@@ -77,14 +77,14 @@ async fn list_tags(db: &Database) -> Result<()> {
 async fn add_tag(db: &Database, args: TagAddArgs) -> Result<()> {
     // 检查是否已存在同名标签
     if let Some(existing) = db.find_tag_by_name(&args.name).await? {
-        println!("❌ 已存在同名标签: {} (ID: {})", existing.name, existing.id);
+        println!("[ERR] 已存在同名标签: {} (ID: {})", existing.name, existing.id);
         return Ok(());
     }
 
     // 验证颜色格式
     if let Some(ref color) = args.color {
         if !Tag::is_valid_color(color) {
-            println!("❌ 无效的颜色格式: {} (应为 #RGB 或 #RRGGBB)", color);
+            println!("[ERR] 无效的颜色格式: {} (应为 #RGB 或 #RRGGBB)", color);
             return Ok(());
         }
     }
@@ -98,7 +98,7 @@ async fn add_tag(db: &Database, args: TagAddArgs) -> Result<()> {
     }
 
     let created = db.create_tag(tag).await?;
-    println!("✅ 标签已创建:");
+    println!("[OK] 标签已创建:");
     println!("   ID: {}", created.id);
     println!("   名称: {}", created.name);
     if let Some(color) = &created.color {
@@ -115,21 +115,21 @@ async fn rename_tag(db: &Database, args: TagRenameArgs) -> Result<()> {
     } else if let Some(tag) = db.get_tag(&args.id_or_name).await? {
         tag
     } else {
-        println!("❌ 标签不存在: {}", args.id_or_name);
+        println!("[ERR] 标签不存在: {}", args.id_or_name);
         return Ok(());
     };
 
     // 检查新名称是否已被使用
     if let Some(existing) = db.find_tag_by_name(&args.new_name).await? {
         if existing.id != tag.id {
-            println!("❌ 名称 '{}' 已被标签 {} 使用", args.new_name, existing.id);
+            println!("[ERR] 名称 '{}' 已被标签 {} 使用", args.new_name, existing.id);
             return Ok(());
         }
     }
 
     let updated = db.update_tag(&tag.id, &args.new_name).await?;
     if let Some(t) = updated {
-        println!("✅ 标签已重命名: {} -> {}", tag.name, t.name);
+        println!("[OK] 标签已重命名: {} -> {}", tag.name, t.name);
     }
 
     Ok(())
@@ -142,13 +142,13 @@ async fn remove_tag(db: &Database, args: TagRemoveArgs) -> Result<()> {
     } else if let Some(tag) = db.get_tag(&args.id_or_name).await? {
         tag
     } else {
-        println!("❌ 标签不存在: {}", args.id_or_name);
+        println!("[ERR] 标签不存在: {}", args.id_or_name);
         return Ok(());
     };
 
     let removed = db.delete_tag(&tag.id).await?;
     if removed {
-        println!("✅ 标签已移除: {} ({})", tag.name, tag.id);
+        println!("[OK] 标签已移除: {} ({})", tag.name, tag.id);
     }
 
     Ok(())

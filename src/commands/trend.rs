@@ -95,7 +95,7 @@ fn print_trend_stats(
     };
 
     println!(
-        "\n📈 {}趋势分析 ({} 至 {})\n",
+        "\n[趋势] {}趋势分析 ({} 至 {})\n",
         period_name,
         from_date,
         to_date
@@ -178,7 +178,7 @@ fn print_category_trends(
         TrendPeriod::Year => "年",
     };
 
-    println!("\n📊 分类{}度支出趋势\n", period_name);
+    println!("\n[图表] 分类{}度支出趋势\n", period_name);
 
     if trends.is_empty() {
         println!("暂无分类数据");

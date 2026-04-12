@@ -43,7 +43,7 @@ pub async fn execute(db: &Database, args: CompareArgs) -> Result<()> {
         )
         .await?;
 
-    println!("\n📊 {}年{}月 财务对比分析\n", year, month);
+    println!("\n[报表] {}年{}月 财务对比分析\n", year, month);
 
     // 打印目标月份概览
     print_overview(&target_stats);
@@ -117,7 +117,7 @@ async fn print_mom_comparison(
         )
         .await?;
 
-    println!("📈 环比对比（vs {}年{}月）", prev_year, prev_month);
+    println!("[对比] 环比对比（vs {}年{}月）", prev_year, prev_month);
     println!();
 
     let mut table = Table::new();
@@ -217,7 +217,7 @@ async fn print_yoy_comparison(
         )
         .await?;
 
-    println!("📊 同比对比（vs {}年{}月）", last_year, month);
+    println!("[对比] 同比对比（vs {}年{}月）", last_year, month);
     println!();
 
     let mut table = Table::new();

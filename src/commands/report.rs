@@ -101,13 +101,13 @@ pub async fn execute(db: &Database, args: ReportArgs) -> Result<()> {
     let start_dt = Utc.from_utc_datetime(&start_date.and_hms_opt(0, 0, 0).unwrap());
     let end_dt = Utc.from_utc_datetime(&end_date.and_hms_opt(0, 0, 0).unwrap());
 
-    println!("📊 正在生成 {} 月报表...", month);
+    println!("[报表] 正在生成 {} 月报表...", month);
 
     // 获取当月交易数据
     let transactions = db.query_by_date_range(start_dt, end_dt).await?;
     
     if transactions.is_empty() {
-        println!("⚠️  {} 月暂无交易记录", month);
+        println!("[WARN] {} 月暂无交易记录", month);
         return Ok(());
     }
 
@@ -144,10 +144,10 @@ pub async fn execute(db: &Database, args: ReportArgs) -> Result<()> {
     if !args.charts_only {
         let html_path = args.output.join(format!("report_{}.html", month));
         generate_html_report(&transactions, &monthly_stats, &category_map, &html_path, &month, &args.output)?;
-        println!("   ✅ HTML 报表: {}", html_path.display());
+        println!("   [OK] HTML 报表: {}", html_path.display());
     }
 
-    println!("\n🎉 报表生成完成！");
+    println!("\n[完成] 报表生成完成！");
     if !args.charts_only {
         println!("   请用浏览器打开: {}", args.output.join(format!("report_{}.html", month)).display());
     }
@@ -736,7 +736,7 @@ fn generate_html_report(
 </head>
 <body>
     <div class="container">
-        <h1>📊 {} 财务月报</h1>
+        <h1>[报表] {} 财务月报</h1>
         
         <div class="summary">
             <div class="card">
@@ -759,22 +759,22 @@ fn generate_html_report(
 
         <div class="chart-row">
             <div class="chart-section">
-                <h2>💰 支出分类分布</h2>
+                <h2>[图表] 支出分类分布</h2>
                 <img src="{}" alt="支出分类饼图" class="chart-img">
             </div>
             <div class="chart-section">
-                <h2>📈 收支趋势（12个月）</h2>
+                <h2>[图表] 收支趋势（12个月）</h2>
                 <img src="{}" alt="收支趋势图" class="chart-img">
             </div>
         </div>
 
         <div class="chart-section">
-            <h2>📅 每日收支情况</h2>
+            <h2>[图表] 每日收支情况</h2>
             <img src="{}" alt="每日收支图" class="chart-img">
         </div>
 
         <div class="chart-section">
-            <h2>💸 支出分类 TOP 10</h2>
+            <h2>[排名] 支出分类 TOP 10</h2>
             <table>
                 <thead>
                     <tr>

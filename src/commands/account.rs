@@ -88,7 +88,7 @@ async fn list_accounts(db: &Database) -> Result<()> {
         return Ok(());
     }
 
-    println!("\n📋 账户列表\n");
+    println!("\n[列表] 账户列表\n");
     println!("{:<20} {:<12} {:<15} {}", "ID", "类型", "父账户", "名称");
     println!("{}", "-".repeat(70));
 
@@ -110,7 +110,7 @@ async fn list_accounts(db: &Database) -> Result<()> {
 async fn add_account(db: &Database, args: AccountAddArgs) -> Result<()> {
     // 检查是否已存在同名账户
     if let Some(existing) = db.find_account_by_name(&args.name).await? {
-        println!("❌ 已存在同名账户: {} (ID: {})", existing.name, existing.id);
+        println!("[ERR] 已存在同名账户: {} (ID: {})", existing.name, existing.id);
         return Ok(());
     }
 
@@ -123,14 +123,14 @@ async fn add_account(db: &Database, args: AccountAddArgs) -> Result<()> {
     // 如果有父账户，验证父账户存在
     if let Some(parent_id) = args.parent {
         if db.get_account(&parent_id).await?.is_none() {
-            println!("❌ 父账户不存在: {}", parent_id);
+            println!("[ERR] 父账户不存在: {}", parent_id);
             return Ok(());
         }
         account = account.with_parent(parent_id);
     }
 
     let created = db.create_account(account).await?;
-    println!("✅ 账户已创建:");
+    println!("[OK] 账户已创建:");
     println!("   ID: {}", created.id);
     println!("   名称: {}", created.name);
     println!("   类型: {}", created.account_type);
@@ -144,21 +144,21 @@ async fn add_account(db: &Database, args: AccountAddArgs) -> Result<()> {
 async fn rename_account(db: &Database, args: AccountRenameArgs) -> Result<()> {
     // 检查账户是否存在
     if db.get_account(&args.id).await?.is_none() {
-        println!("❌ 账户不存在: {}", args.id);
+        println!("[ERR] 账户不存在: {}", args.id);
         return Ok(());
     }
 
     // 检查新名称是否已被使用
     if let Some(existing) = db.find_account_by_name(&args.new_name).await? {
         if existing.id != args.id {
-            println!("❌ 名称 '{}' 已被账户 {} 使用", args.new_name, existing.id);
+            println!("[ERR] 名称 '{}' 已被账户 {} 使用", args.new_name, existing.id);
             return Ok(());
         }
     }
 
     let updated = db.update_account(&args.id, &args.new_name).await?;
     if let Some(account) = updated {
-        println!("✅ 账户已重命名: {} -> {}", args.id, account.name);
+        println!("[OK] 账户已重命名: {} -> {}", args.id, account.name);
     }
 
     Ok(())
@@ -174,7 +174,7 @@ async fn remove_account(db: &Database, args: AccountRemoveArgs) -> Result<()> {
     // 检查是否有子账户
     let children = db.list_child_accounts(&args.id).await?;
     if !children.is_empty() {
-        println!("❌ 无法移除，该账户有 {} 个子账户", children.len());
+        println!("[ERR] 无法移除，该账户有 {} 个子账户", children.len());
         println!("   请先移除子账户:");
         for child in children {
             println!("   - {} ({})", child.name, child.id);
@@ -185,14 +185,14 @@ async fn remove_account(db: &Database, args: AccountRemoveArgs) -> Result<()> {
     // 检查是否有关联的交易记录
     let tx_count = db.count_transactions_by_account(&args.id).await?;
     if tx_count > 0 {
-        println!("❌ 无法移除：该账户被 {} 条交易记录引用", tx_count);
+        println!("[ERR] 无法移除：该账户被 {} 条交易记录引用", tx_count);
         println!("   请先移除或修改相关交易记录后再试");
         return Ok(());
     }
 
     let removed = db.delete_account(&args.id).await?;
     if removed {
-        println!("✅ 账户已移除: {}", args.id);
+        println!("[OK] 账户已移除: {}", args.id);
     }
 
     Ok(())

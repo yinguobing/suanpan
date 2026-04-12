@@ -114,7 +114,7 @@ pub async fn execute(db: &Database, args: AddArgs) -> Result<()> {
 
     let created = db.create_transaction(transaction).await?;
 
-    println!("✅ 交易记录已创建:");
+    println!("[OK] 交易记录已创建:");
     println!("   ID: {:?}", created.id);
     println!("   类型: {}", created.tx_type);
     println!("   金额: {} {}", created.amount, created.currency);

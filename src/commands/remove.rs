@@ -12,7 +12,7 @@ pub struct RemoveArgs {
 
 pub async fn execute(db: &Database, args: RemoveArgs) -> Result<()> {
     if args.ids.is_empty() {
-        println!("❌ 请提供要移除的交易记录 ID");
+        println!("[ERR] 请提供要移除的交易记录 ID");
         println!("用法: finance remove <短ID> [短ID...]");
         return Ok(());
     }
@@ -20,7 +20,7 @@ pub async fn execute(db: &Database, args: RemoveArgs) -> Result<()> {
     // 验证所有 ID 格式
     for id in &args.ids {
         if id.len() != 12 {
-            println!("❌ ID '{}' 格式错误，应为 12 位字符", id);
+            println!("[ERR] ID '{}' 格式错误，应为 12 位字符", id);
             return Ok(());
         }
     }
@@ -32,10 +32,10 @@ pub async fn execute(db: &Database, args: RemoveArgs) -> Result<()> {
 
     for (id, success) in &results {
         if *success {
-            println!("✅ 已移除: {}", id);
+            println!("[OK] 已移除: {}", id);
             success_count += 1;
         } else {
-            println!("❌ 未找到: {}", id);
+            println!("[ERR] 未找到: {}", id);
             fail_count += 1;
         }
     }

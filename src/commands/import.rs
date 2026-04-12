@@ -93,7 +93,7 @@ pub async fn execute(db: &Database, args: ImportArgs) -> Result<()> {
     }
 
     // 显示预览
-    println!("\n📋 识别到 {} 条交易记录\n", transactions.len());
+    println!("\n[信息] 识别到 {} 条交易记录\n", transactions.len());
     
     if args.dry_run {
         // 预览模式：显示前 10 条
@@ -162,7 +162,7 @@ pub async fn execute(db: &Database, args: ImportArgs) -> Result<()> {
         }
     }
 
-    println!("✅ 导入完成: {} 条成功, {} 条跳过（重复）", imported, skipped);
+    println!("[OK] 导入完成: {} 条成功, {} 条跳过（重复）", imported, skipped);
 
     Ok(())
 }
@@ -207,7 +207,7 @@ async fn parse_excel(path: &Path, args: &ImportArgs) -> Result<Vec<ParsedTransac
                 if sheet_name != target { continue; }
             }
             if let Ok(range) = workbook.worksheet_range(sheet_name) {
-                println!("📄 正在解析 sheet: {}", sheet_name);
+                println!("[文件] 正在解析 sheet: {}", sheet_name);
                 let rows: Vec<Vec<Data>> = range.rows().map(|r| r.to_vec()).collect();
                 if !rows.is_empty() {
                     let txs = parse_sheet_rows(&rows, args)?;
@@ -222,7 +222,7 @@ async fn parse_excel(path: &Path, args: &ImportArgs) -> Result<Vec<ParsedTransac
                 if sheet_name != target { continue; }
             }
             if let Ok(range) = workbook.worksheet_range(sheet_name) {
-                println!("📄 正在解析 sheet: {}", sheet_name);
+                println!("[文件] 正在解析 sheet: {}", sheet_name);
                 let rows: Vec<Vec<Data>> = range.rows().map(|r| r.to_vec()).collect();
                 if !rows.is_empty() {
                     let txs = parse_sheet_rows(&rows, args)?;
@@ -408,14 +408,14 @@ fn parse_suishouji_sheet(rows: &[Vec<Data>]) -> Result<Vec<ParsedTransaction>> {
 /// 解析支付宝格式（简化版）
 fn parse_alipay_sheet(rows: &[Vec<Data>]) -> Result<Vec<ParsedTransaction>> {
     // TODO: 实现支付宝格式解析
-    println!("⚠️ 支付宝格式解析暂未实现，使用通用格式");
+    println!("[WARN] 支付宝格式解析暂未实现，使用通用格式");
     parse_generic_sheet(rows)
 }
 
 /// 解析微信格式（简化版）
 fn parse_wechat_sheet(rows: &[Vec<Data>]) -> Result<Vec<ParsedTransaction>> {
     // TODO: 实现微信格式解析
-    println!("⚠️ 微信格式解析暂未实现，使用通用格式");
+    println!("[WARN] 微信格式解析暂未实现，使用通用格式");
     parse_generic_sheet(rows)
 }
 

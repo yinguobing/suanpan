@@ -208,7 +208,7 @@ pub async fn execute(db: &Database, args: StatsArgs) -> Result<()> {
 
 /// 打印月度统计结果
 fn print_monthly_stats(stats: &MonthlyStats, by_category: bool, show_ids: bool) {
-    println!("\n📊 {}年{}月 财务统计\n", stats.year, stats.month);
+    println!("\n[报表] {}年{}月 财务统计\n", stats.year, stats.month);
 
     // 基本统计
     let mut table = Table::new();
@@ -234,7 +234,7 @@ fn print_monthly_stats(stats: &MonthlyStats, by_category: bool, show_ids: bool) 
         if !stats.category_breakdown.is_empty() {
             print_category_breakdown(&stats.category_breakdown, stats.total_expense, show_ids);
         } else {
-            println!("\n📈 暂无分类数据");
+            println!("\n[信息] 暂无分类数据");
         }
     }
 }
@@ -245,9 +245,9 @@ fn print_period_stats(stats: &PeriodStats, by_category: bool, show_ids: bool) {
     let to_str = stats.to.format("%Y-%m-%d").to_string();
 
     if from_str == to_str {
-        println!("\n📊 {} 财务统计\n", from_str);
+        println!("\n[报表] {} 财务统计\n", from_str);
     } else {
-        println!("\n📊 {} 至 {} 财务统计\n", from_str, to_str);
+        println!("\n[报表] {} 至 {} 财务统计\n", from_str, to_str);
     }
 
     // 基本统计
@@ -281,7 +281,7 @@ fn print_category_breakdown(
     total_expense: Decimal,
     show_ids: bool,
 ) {
-    println!("\n📈 支出分类占比\n");
+    println!("\n[图表] 支出分类占比\n");
     let mut cat_table = Table::new();
     cat_table.set_header(vec!["分类", "金额", "占比"]);
 
@@ -312,7 +312,7 @@ fn print_hierarchical_category_stats(
     title: &str,
     show_ids: bool,
 ) {
-    println!("\n📊 {}\n", title);
+    println!("\n[报表] {}\n", title);
 
     // 检查是否有有效数据（非零金额）
     let has_data = stats.iter().any(|s| s.total_amount != Decimal::ZERO);
@@ -395,7 +395,7 @@ fn print_account_stats(
     single_account: bool,
 ) {
     if account_stats.is_empty() {
-        println!("\n📊 没有找到账户统计数据\n");
+        println!("\n[报表] 没有找到账户统计数据\n");
         return;
     }
 
@@ -407,9 +407,9 @@ fn print_account_stats(
         } else {
             &stats.account_name
         };
-        println!("\n📊 账户「{}」统计\n", display_name);
+        println!("\n[报表] 账户「{}」统计\n", display_name);
     } else {
-        println!("\n📊 账户统计\n");
+        println!("\n[报表] 账户统计\n");
     }
 
     let mut table = Table::new();

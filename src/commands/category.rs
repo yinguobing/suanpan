@@ -76,7 +76,7 @@ async fn list_categories(db: &Database, args: ListArgs) -> Result<()> {
         return Ok(());
     }
 
-    println!("\n📂 分类列表\n");
+    println!("\n[列表] 分类列表\n");
     println!("{:<20} {:<8} {:<20} {}", "ID", "层级", "父分类", "完整路径");
     println!("{}", "-".repeat(80));
 
@@ -113,7 +113,7 @@ async fn show_tree(db: &Database, args: TreeArgs) -> Result<()> {
         return Ok(());
     }
 
-    println!("\n📂 分类树\n");
+    println!("\n[列表] 分类树\n");
 
     // 构建树结构
     let mut roots: Vec<&CategoryRecord> = categories.iter().filter(|c| c.parent_id.is_none()).collect();
@@ -185,7 +185,7 @@ async fn add_category(db: &Database, args: CategoryAddArgs) -> Result<()> {
     let segments = category_utils::parse_path(&args.path);
 
     if segments.is_empty() {
-        println!("❌ 无效的分类路径");
+        println!("[ERR] 无效的分类路径");
         return Ok(());
     }
 
@@ -225,7 +225,7 @@ async fn add_category(db: &Database, args: CategoryAddArgs) -> Result<()> {
         parent_id = Some(created.id);
     }
 
-    println!("\n✅ 分类路径已确保存在: {}", args.path);
+    println!("\n[OK] 分类路径已确保存在: {}", args.path);
     Ok(())
 }
 
@@ -236,13 +236,13 @@ async fn rename_category(db: &Database, args: CategoryRenameArgs) -> Result<()> 
     } else if let Some(cat) = db.get_category(&args.path_or_id).await? {
         cat
     } else {
-        println!("❌ 分类不存在: {}", args.path_or_id);
+        println!("[ERR] 分类不存在: {}", args.path_or_id);
         return Ok(());
     };
 
     let updated = db.update_category(&category.id, &args.new_name).await?;
     if let Some(cat) = updated {
-        println!("✅ 分类已重命名:");
+        println!("[OK] 分类已重命名:");
         println!("   原路径: {}", category.full_path);
         println!("   新路径: {}", cat.full_path);
     }
@@ -263,7 +263,7 @@ async fn remove_category(db: &Database, args: CategoryRemoveArgs) -> Result<()> 
             if let Some(c) = db.get_category(&args.path_or_id).await? {
                 c
             } else {
-                println!("❌ 分类不存在: {}", args.path_or_id);
+                println!("[ERR] 分类不存在: {}", args.path_or_id);
                 return Ok(());
             }
         }
@@ -272,20 +272,20 @@ async fn remove_category(db: &Database, args: CategoryRemoveArgs) -> Result<()> 
     // 检查是否有子分类
     let children = db.list_child_categories(&category.id).await?;
     if !children.is_empty() {
-        println!("⚠️  该分类有 {} 个子分类，将一并移除", children.len());
+        println!("[WARN] 该分类有 {} 个子分类，将一并移除", children.len());
     }
 
     // 检查是否有关联的交易记录
     let tx_count = db.count_transactions_by_category(&category.id).await?;
     if tx_count > 0 {
-        println!("❌ 无法移除：该分类被 {} 条交易记录引用", tx_count);
+        println!("[ERR] 无法移除：该分类被 {} 条交易记录引用", tx_count);
         println!("   请先移除或修改相关交易记录后再试");
         return Ok(());
     }
 
     let removed = db.delete_category(&category.id).await?;
     if removed {
-        println!("✅ 分类已移除: {}", category.full_path);
+        println!("[OK] 分类已移除: {}", category.full_path);
     }
 
     Ok(())

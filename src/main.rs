@@ -47,7 +47,7 @@ fn get_data_dir() -> Result<PathBuf> {
     
     // 如果新目录不存在且旧目录存在，执行迁移
     if !new_dir.exists() && old_dir.exists() {
-        println!("📦 检测到旧版本数据，正在迁移...");
+        println!("[信息] 检测到旧版本数据，正在迁移...");
         std::fs::create_dir_all(&new_dir)?;
         
         // 复制所有文件
@@ -59,7 +59,7 @@ fn get_data_dir() -> Result<PathBuf> {
                 std::fs::copy(&src, &dst)?;
             }
         }
-        println!("✅ 数据迁移完成！旧数据保留在: {}", old_dir.display());
+        println!("[OK] 数据迁移完成！旧数据保留在: {}", old_dir.display());
         println!();
     }
     
