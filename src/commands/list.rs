@@ -163,15 +163,29 @@ async fn output_table(
     show_ids: bool,
     limit: usize,
 ) -> Result<()> {
+    use comfy_table::CellAlignment;
+    
     let mut table = Table::new();
     table.set_header(vec![
         "时间", "类型", "金额", "货币", "账户", "去向", "分类", "备注", "ID",
     ]);
+    
+    // 设置金额列右对齐
+    if let Some(col) = table.column_mut(2) {
+        col.set_cell_alignment(CellAlignment::Right);
+    }
 
-    for tx in transactions.iter().take(limit) {
+    // 收集所有金额并计算最大宽度
+    let amounts: Vec<String> = transactions.iter().take(limit)
+        .map(|tx| format!("{:.2}", tx.amount))
+        .collect();
+    let max_amount_len = amounts.iter().map(|s| s.len()).max().unwrap_or(0);
+    
+    for (idx, tx) in transactions.iter().take(limit).enumerate() {
         let time = format_datetime_iso(&tx.timestamp);
         let tx_type = format!("{}", tx.tx_type);
-        let amount = tx.amount.to_string();
+        // 固定2位小数，并填充空格以实现小数点对齐
+        let amount = format!("{:>width$}", amounts[idx], width = max_amount_len);
         let currency = &tx.currency;
         
         // 根据 show_ids 参数决定显示名称还是 ID
