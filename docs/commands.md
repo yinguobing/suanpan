@@ -239,7 +239,7 @@ suanpan list --search "鸡蛋"
 suanpan list --from 2026-01-01 --to 2026-01-31 --search "地铁"
 ```
 
-### ⚠️ 注意事项
+### 注意事项
 
 **1. --limit 参数与模糊搜索的交互**
 
@@ -249,7 +249,7 @@ suanpan list --from 2026-01-01 --to 2026-01-31 --search "地铁"
 # ❌ 可能返回空结果（如果前10条没有匹配项）
 suanpan list --search "鸡蛋" --limit 10
 
-# ✅ 正确做法：增大 limit 或使用时间范围缩小查询范围
+# 正确做法：增大 limit 或使用时间范围缩小查询范围
 suanpan list --search "鸡蛋" --limit 500
 suanpan list --from 2026-01-01 --to 2026-01-31 --search "鸡蛋"
 ```
