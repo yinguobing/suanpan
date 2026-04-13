@@ -13,7 +13,7 @@
 - **多种交易类型**：支持支出、收入、转账、债务、债权
 - **统计报表**：月度收支统计、分类占比、趋势分析、对比分析
 - **智能查询**：模糊搜索、组合筛选、导出 CSV
-- **可视化报表**：生成 HTML 报表（饼图、折线图、柱状图）
+- **HTML 报表**：生成简洁的数据报表（表格形式展示）
 - **数据导入**：支持随手记 XLS/XLSX/CSV 导入，自动去重
 - **灵活分类**：多级分类体系，支持层级汇总
 - **精确计算**：使用 Decimal 类型避免浮点精度问题
@@ -52,7 +52,7 @@ suanpan stats --month 2026-04
 # 查看趋势分析
 suanpan trend --period month
 
-# 生成可视化报表
+# 生成 HTML 报表
 suanpan report --month 2026-04
 ```
 
@@ -138,7 +138,7 @@ cp ~/suanpan-backup-20260406.db ~/.local/share/suanpan/data.db
 
 ## 技术栈
 
-Rust | SurrealDB | clap | chrono | rust_decimal | plotters
+Rust | SurrealDB | clap | chrono | rust_decimal
 
 ## 文档
 

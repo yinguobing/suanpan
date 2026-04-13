@@ -44,14 +44,11 @@
 | 金额范围 | `--min-amount/--max-amount` | 金额筛选 |
 | 导出结果 | `--output <路径>` | CSV/文本格式 |
 
-#### 可视化报表
+#### HTML 报表
 
 | 功能 | 命令 | 说明 |
 |------|------|------|
-| HTML 报表 | `suanpan report --month YYYY-MM` | 生成交互式报表 |
-| 支出饼图 | - | Top 8 + 其他聚合 |
-| 趋势折线图 | - | 最近12个月收支趋势 |
-| 每日柱状图 | - | 每日收支柱状图 |
+| HTML 报表 | `suanpan report --month YYYY-MM` | 生成数据报表（表格形式展示收支趋势、分类排名等） |
 
 ## 核心命令示例
 
@@ -110,7 +107,7 @@ suanpan list --from 2026-01-01 --to 2026-01-31 --output january.csv
 suanpan list --category "餐饮" --tx-type expense --min-amount 50 --output food_expenses.csv
 ```
 
-### 可视化报表
+### HTML 报表
 
 ```bash
 # 生成月度 HTML 报表
@@ -118,9 +115,6 @@ suanpan report --month 2026-01
 
 # 指定输出目录
 suanpan report --month 2026-01 --output ./reports
-
-# 只生成图表
-suanpan report --month 2026-01 --charts-only
 ```
 
 ## 技术要点
@@ -129,4 +123,4 @@ suanpan report --month 2026-01 --charts-only
 - **趋势分析**: 支持多种周期类型，通过日期格式化生成周期键
 - **对比分析**: 使用 `tokio::try_join!` 并发查询当前、上月、去年同月数据
 - **模糊搜索**: 使用 `string::contains` 进行不区分大小写的匹配
-- **报表生成**: 使用 `plotters` 库生成图表，嵌入 HTML 模板
+- **报表生成**: 生成 HTML 格式的数据报表，使用表格展示收支趋势、分类排名等

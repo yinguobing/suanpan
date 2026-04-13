@@ -118,17 +118,14 @@ suanpan compare --month 2026-01 --compare-type mom
 suanpan compare --month 2026-01 --compare-type yoy
 ```
 
-### 可视化报表
+### HTML 报表
 
 ```bash
-# 生成月度 HTML 报表（含图表）
+# 生成月度 HTML 报表
 suanpan report --month 2026-01
 
 # 指定输出目录
 suanpan report --month 2026-01 --output ./reports
-
-# 只生成图表（不生成 HTML）
-suanpan report --month 2026-01 --charts-only
 ```
 
 ### 账户管理

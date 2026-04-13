@@ -38,7 +38,7 @@ suanpan/
 │   │   ├── stats.rs         # 统计分析
 │   │   ├── trend.rs         # 趋势分析
 │   │   ├── compare.rs       # 对比分析（环比/同比）
-│   │   ├── report.rs        # HTML 可视化报表
+│   │   ├── report.rs        # HTML 数据报表
 │   │   ├── migrate.rs       # 数据迁移
 │   │   ├── import.rs        # 数据导入
 │   │   ├── account.rs       # 账户管理

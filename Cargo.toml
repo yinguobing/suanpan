@@ -25,7 +25,6 @@ comfy-table = "7.1"
 nanoid = "0.4"
 tree-ds = { version = "0.1", features = ["serde"] }
 calamine = "0.26"
-plotters = "0.3"
 
 [dev-dependencies]
 rust_decimal_macros = "1.36"

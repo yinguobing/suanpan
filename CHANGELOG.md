@@ -7,6 +7,11 @@
 
 ## [Unreleased]
 
+### Changed
+- 移除 `plotters` 依赖，简化报表功能
+- `report` 命令不再生成图表（饼图、折线图、柱状图），改为生成纯 HTML 数据报表
+- 移除 `--charts-only`、`--width`、`--height` 参数
+
 ### Added
 - 初始版本开发中
 
