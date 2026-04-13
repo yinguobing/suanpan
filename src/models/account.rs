@@ -5,6 +5,7 @@ use surrealdb::Datetime;
 /// 账户类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum AccountType {
     /// 银行卡
     BankCard,
@@ -17,6 +18,7 @@ pub enum AccountType {
     /// 信用卡
     Credit,
     /// 其他
+    #[default]
     Other,
 }
 
@@ -30,12 +32,6 @@ impl fmt::Display for AccountType {
             AccountType::Credit => write!(f, "信用卡"),
             AccountType::Other => write!(f, "其他"),
         }
-    }
-}
-
-impl Default for AccountType {
-    fn default() -> Self {
-        AccountType::Other
     }
 }
 

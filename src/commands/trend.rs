@@ -206,7 +206,7 @@ fn print_category_trends(
             // 简化显示：只显示最后一部分
             category_id
                 .split('/')
-                .last()
+                .next_back()
                 .unwrap_or(category_id)
                 .to_string()
         };

@@ -342,7 +342,7 @@ fn parse_month(month_str: &str) -> Result<(i32, u32)> {
         .parse()
         .map_err(|_| crate::error::FinanceError::Parse("月份格式错误".to_string()))?;
 
-    if month < 1 || month > 12 {
+    if !(1..=12).contains(&month) {
         return Err(crate::error::FinanceError::Parse(
             "月份应在 1-12 之间".to_string(),
         ));

@@ -72,7 +72,7 @@ impl CategoryTree {
     pub fn get_data(&self, id: &str) -> Option<CategoryData> {
         self.tree
             .get_node_by_id(&id.to_string())
-            .and_then(|n| n.get_value().map(|v| v.clone()))
+            .and_then(|n| n.get_value())
     }
 
     /// 获取节点名称
@@ -100,7 +100,6 @@ impl CategoryTree {
                     .map(|sub| {
                         sub.get_nodes()
                             .clone()
-                            .into_iter()
                             .filter(|n| n.get_node_id() != id)
                             .map(|n| n.get_node_id())
                             .collect()
@@ -132,7 +131,7 @@ impl CategoryTree {
         let parts: Vec<String> = ancestors
             .iter()
             .filter_map(|aid| self.get_name(aid))
-            .chain(self.get_name(id).into_iter())
+            .chain(self.get_name(id))
             .collect();
 
         parts.join("/")
@@ -169,7 +168,6 @@ impl CategoryTree {
         self.tree
             .get_nodes()
             .clone()
-            .into_iter()
             .filter(|n| {
                 // 检查是否为根节点（没有祖先）
                 self.tree

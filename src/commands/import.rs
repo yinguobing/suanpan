@@ -134,7 +134,7 @@ pub async fn execute(db: &Database, args: ImportArgs) -> Result<()> {
             .map(|tx| {
                 format!(
                     "{}-{}-{}-{}",
-                    tx.timestamp.to_string(),
+                    tx.timestamp,
                     tx.amount,
                     tx.account_from_id,
                     tx.description.as_deref().unwrap_or("")
@@ -145,7 +145,7 @@ pub async fn execute(db: &Database, args: ImportArgs) -> Result<()> {
         for tx in transactions {
             let key = format!(
                 "{}-{}-{}-{}",
-                tx.timestamp.to_string(),
+                tx.timestamp,
                 tx.amount,
                 tx.account_from,
                 tx.description.as_deref().unwrap_or("")
@@ -472,17 +472,19 @@ fn parse_generic_sheet(rows: &[Vec<Data>]) -> Result<Vec<ParsedTransaction>> {
             };
 
             // 检测时间
-            if time_col.is_none() && (s.contains('-') || s.contains('/')) && s.len() >= 8 {
-                if parse_datetime(s).is_ok() {
-                    time_col = Some(i);
-                }
+            if time_col.is_none()
+                && (s.contains('-') || s.contains('/'))
+                && s.len() >= 8
+                && parse_datetime(s).is_ok()
+            {
+                time_col = Some(i);
             }
 
             // 检测金额
-            if amount_col.is_none() {
-                if s.parse::<f64>().is_ok() || s.chars().any(|c| c.is_ascii_digit()) {
-                    amount_col = Some(i);
-                }
+            if amount_col.is_none()
+                && (s.parse::<f64>().is_ok() || s.chars().any(|c| c.is_ascii_digit()))
+            {
+                amount_col = Some(i);
             }
 
             // 检测类型

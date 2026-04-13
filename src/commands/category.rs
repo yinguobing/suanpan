@@ -77,7 +77,7 @@ async fn list_categories(db: &Database, args: ListArgs) -> Result<()> {
     }
 
     println!("\n[列表] 分类列表\n");
-    println!("{:<20} {:<8} {:<20} {}", "ID", "层级", "父分类", "完整路径");
+    println!("{:<20} {:<8} {:<20} 完整路径", "ID", "层级", "父分类");
     println!("{}", "-".repeat(80));
 
     // 按完整路径排序

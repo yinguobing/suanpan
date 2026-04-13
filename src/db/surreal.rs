@@ -1014,7 +1014,7 @@ impl Database {
         };
 
         // 使用 MERGE 进行部分更新
-        let sql = format!("UPDATE {} MERGE $data", id.to_string());
+        let sql = format!("UPDATE {} MERGE $data", id);
 
         let mut result = self
             .db

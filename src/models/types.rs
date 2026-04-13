@@ -5,8 +5,10 @@ use std::str::FromStr;
 /// 交易类型
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum TxType {
     /// 支出
+    #[default]
     Expense,
     /// 收入
     Income,
@@ -45,19 +47,15 @@ impl FromStr for TxType {
     }
 }
 
-impl Default for TxType {
-    fn default() -> Self {
-        TxType::Expense
-    }
-}
-
 /// 数据来源
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum TxSource {
     /// 银行账单导入
     CsvImport,
     /// 手动录入（CLI 参数）
+    #[default]
     Manual,
 }
 
@@ -67,12 +65,6 @@ impl fmt::Display for TxSource {
             TxSource::CsvImport => write!(f, "CSV导入"),
             TxSource::Manual => write!(f, "手动录入"),
         }
-    }
-}
-
-impl Default for TxSource {
-    fn default() -> Self {
-        TxSource::Manual
     }
 }
 

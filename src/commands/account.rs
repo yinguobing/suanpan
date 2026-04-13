@@ -89,7 +89,7 @@ async fn list_accounts(db: &Database) -> Result<()> {
     }
 
     println!("\n[列表] 账户列表\n");
-    println!("{:<20} {:<12} {:<15} {}", "ID", "类型", "父账户", "名称");
+    println!("{:<20} {:<12} {:<15} 名称", "ID", "类型", "父账户");
     println!("{}", "-".repeat(70));
 
     for account in accounts {

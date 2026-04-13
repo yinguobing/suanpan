@@ -62,7 +62,7 @@ async fn list_tags(db: &Database) -> Result<()> {
     }
 
     println!("\n[列表] 标签列表\n");
-    println!("{:<20} {:<10} {}", "ID", "颜色", "名称");
+    println!("{:<20} {:<10} 名称", "ID", "颜色");
     println!("{}", "-".repeat(50));
 
     for tag in tags {
