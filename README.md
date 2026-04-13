@@ -20,6 +20,18 @@
 
 ## 安装
 
+### 快速安装（推荐）
+
+使用一键安装脚本自动下载最新版本：
+
+```bash
+curl -sSL https://raw.githubusercontent.com/yinguobing/suanpan/main/install.sh | bash
+```
+
+脚本会自动检测你的操作系统和架构，下载对应的预编译二进制文件。
+
+### 从源码编译
+
 ```bash
 # 克隆仓库
 git clone https://github.com/yinguobing/suanpan.git
