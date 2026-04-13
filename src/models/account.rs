@@ -90,8 +90,8 @@ mod tests {
 
     #[test]
     fn test_account_with_parent() {
-        let account = Account::new("acc_cmb_li", "招招理财", AccountType::Investment)
-            .with_parent("acc_cmb");
+        let account =
+            Account::new("acc_cmb_li", "招招理财", AccountType::Investment).with_parent("acc_cmb");
         assert_eq!(account.parent_id, Some("acc_cmb".to_string()));
     }
 

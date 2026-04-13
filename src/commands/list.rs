@@ -123,32 +123,53 @@ pub async fn execute(db: &Database, args: ListArgs) -> Result<()> {
 
     // 构建账户和分类的名称映射
     let accounts = db.list_accounts().await?;
-    let account_map: std::collections::HashMap<_, _> = accounts
-        .into_iter()
-        .map(|a| (a.id, a.name))
-        .collect();
-    
+    let account_map: std::collections::HashMap<_, _> =
+        accounts.into_iter().map(|a| (a.id, a.name)).collect();
+
     let categories = db.list_categories().await?;
-    let category_map: std::collections::HashMap<_, _> = categories
-        .into_iter()
-        .map(|c| (c.id, c.name))
-        .collect();
+    let category_map: std::collections::HashMap<_, _> =
+        categories.into_iter().map(|c| (c.id, c.name)).collect();
 
     // 如果有输出文件，先写入文件
     if let Some(output_path) = args.output {
-        let content = generate_output(&transactions, &account_map, &category_map, args.show_ids, args.limit, &args.format);
+        let content = generate_output(
+            &transactions,
+            &account_map,
+            &category_map,
+            args.show_ids,
+            args.limit,
+            &args.format,
+        );
         std::fs::write(&output_path, content)?;
-        println!("[OK] 已导出 {} 条记录到: {}", transactions.len().min(args.limit), output_path);
+        println!(
+            "[OK] 已导出 {} 条记录到: {}",
+            transactions.len().min(args.limit),
+            output_path
+        );
         return Ok(());
     }
 
     // 根据格式选择输出方式
     match args.format {
         OutputFormat::Table => {
-            output_table(&transactions, &account_map, &category_map, args.show_ids, args.limit).await?;
+            output_table(
+                &transactions,
+                &account_map,
+                &category_map,
+                args.show_ids,
+                args.limit,
+            )
+            .await?;
         }
         OutputFormat::Csv => {
-            output_csv(&transactions, &account_map, &category_map, args.show_ids, args.limit).await?;
+            output_csv(
+                &transactions,
+                &account_map,
+                &category_map,
+                args.show_ids,
+                args.limit,
+            )
+            .await?;
         }
     }
 
@@ -164,30 +185,32 @@ async fn output_table(
     limit: usize,
 ) -> Result<()> {
     use comfy_table::CellAlignment;
-    
+
     let mut table = Table::new();
     table.set_header(vec![
         "时间", "类型", "金额", "货币", "账户", "去向", "分类", "备注", "ID",
     ]);
-    
+
     // 设置金额列右对齐
     if let Some(col) = table.column_mut(2) {
         col.set_cell_alignment(CellAlignment::Right);
     }
 
     // 收集所有金额并计算最大宽度
-    let amounts: Vec<String> = transactions.iter().take(limit)
+    let amounts: Vec<String> = transactions
+        .iter()
+        .take(limit)
         .map(|tx| format!("{:.2}", tx.amount))
         .collect();
     let max_amount_len = amounts.iter().map(|s| s.len()).max().unwrap_or(0);
-    
+
     for (idx, tx) in transactions.iter().take(limit).enumerate() {
         let time = format_datetime_iso(&tx.timestamp);
         let tx_type = format!("{}", tx.tx_type);
         // 固定2位小数，并填充空格以实现小数点对齐
         let amount = format!("{:>width$}", amounts[idx], width = max_amount_len);
         let currency = &tx.currency;
-        
+
         // 根据 show_ids 参数决定显示名称还是 ID
         let account_from = if show_ids {
             tx.account_from_id.clone()
@@ -197,15 +220,18 @@ async fn output_table(
                 .cloned()
                 .unwrap_or_else(|| tx.account_from_id.clone())
         };
-        
+
         let account_to = tx.account_to_id.as_deref().map(|id| {
             if show_ids {
                 id.to_string()
             } else {
-                account_map.get(id).cloned().unwrap_or_else(|| id.to_string())
+                account_map
+                    .get(id)
+                    .cloned()
+                    .unwrap_or_else(|| id.to_string())
             }
         });
-        
+
         let category = if show_ids {
             tx.category_id.clone()
         } else {
@@ -214,7 +240,7 @@ async fn output_table(
                 .cloned()
                 .unwrap_or_else(|| tx.category_id.clone())
         };
-        
+
         let description = tx.description.as_deref().unwrap_or("-");
         let short_id = format_short_id(&tx.id);
 
@@ -233,7 +259,7 @@ async fn output_table(
 
     println!("{}", table);
     println!("共 {} 条记录", transactions.len().min(limit));
-    
+
     Ok(())
 }
 
@@ -253,7 +279,7 @@ async fn output_csv(
         let tx_type = format!("{}", tx.tx_type);
         let amount = tx.amount.to_string();
         let currency = &tx.currency;
-        
+
         // 根据 show_ids 参数决定显示名称还是 ID
         let account_from = if show_ids {
             tx.account_from_id.clone()
@@ -263,15 +289,22 @@ async fn output_csv(
                 .cloned()
                 .unwrap_or_else(|| tx.account_from_id.clone())
         };
-        
-        let account_to = tx.account_to_id.as_deref().map(|id| {
-            if show_ids {
-                id.to_string()
-            } else {
-                account_map.get(id).cloned().unwrap_or_else(|| id.to_string())
-            }
-        }).unwrap_or_else(|| "".to_string());
-        
+
+        let account_to = tx
+            .account_to_id
+            .as_deref()
+            .map(|id| {
+                if show_ids {
+                    id.to_string()
+                } else {
+                    account_map
+                        .get(id)
+                        .cloned()
+                        .unwrap_or_else(|| id.to_string())
+                }
+            })
+            .unwrap_or_else(|| "".to_string());
+
         let category = if show_ids {
             tx.category_id.clone()
         } else {
@@ -280,13 +313,13 @@ async fn output_csv(
                 .cloned()
                 .unwrap_or_else(|| tx.category_id.clone())
         };
-        
+
         let description = tx.description.clone().unwrap_or_default();
         let short_id = format_short_id(&tx.id);
 
         // 转义包含逗号或引号的字段
         let description_escaped = escape_csv_field(&description);
-        
+
         println!(
             "{},{},{},{},{},{},{},{},{}",
             time,
@@ -318,8 +351,10 @@ fn generate_output(
     match format {
         OutputFormat::Table => {
             // 表格头部
-            output.push_str(&format!("{:<25} {:<8} {:<12} {:<6} {:<12} {:<12} {:<16} {:<30} {:<12}\n",
-                "时间", "类型", "金额", "货币", "账户", "去向", "分类", "备注", "ID"));
+            output.push_str(&format!(
+                "{:<25} {:<8} {:<12} {:<6} {:<12} {:<12} {:<16} {:<30} {:<12}\n",
+                "时间", "类型", "金额", "货币", "账户", "去向", "分类", "备注", "ID"
+            ));
             output.push_str(&"-".repeat(146));
             output.push('\n');
 
@@ -328,7 +363,7 @@ fn generate_output(
                 let tx_type = format!("{}", tx.tx_type);
                 let amount = tx.amount.to_string();
                 let currency = &tx.currency;
-                
+
                 let account_from = if show_ids {
                     tx.account_from_id.clone()
                 } else {
@@ -337,15 +372,22 @@ fn generate_output(
                         .cloned()
                         .unwrap_or_else(|| tx.account_from_id.clone())
                 };
-                
-                let account_to = tx.account_to_id.as_deref().map(|id| {
-                    if show_ids {
-                        id.to_string()
-                    } else {
-                        account_map.get(id).cloned().unwrap_or_else(|| id.to_string())
-                    }
-                }).unwrap_or_else(|| "-".to_string());
-                
+
+                let account_to = tx
+                    .account_to_id
+                    .as_deref()
+                    .map(|id| {
+                        if show_ids {
+                            id.to_string()
+                        } else {
+                            account_map
+                                .get(id)
+                                .cloned()
+                                .unwrap_or_else(|| id.to_string())
+                        }
+                    })
+                    .unwrap_or_else(|| "-".to_string());
+
                 let category = if show_ids {
                     tx.category_id.clone()
                 } else {
@@ -354,7 +396,7 @@ fn generate_output(
                         .cloned()
                         .unwrap_or_else(|| tx.category_id.clone())
                 };
-                
+
                 let description = tx.description.as_deref().unwrap_or("-");
                 let short_id = format_short_id(&tx.id);
 
@@ -366,9 +408,13 @@ fn generate_output(
                         s.chars().take(max_len).collect::<String>()
                     }
                 };
-                
-                output.push_str(&format!("{:<25} {:<8} {:<12} {:<6} {:<12} {:<12} {:<16} {:<30} {:<12}\n",
-                    time, tx_type, amount, currency, 
+
+                output.push_str(&format!(
+                    "{:<25} {:<8} {:<12} {:<6} {:<12} {:<12} {:<16} {:<30} {:<12}\n",
+                    time,
+                    tx_type,
+                    amount,
+                    currency,
                     safe_truncate(&account_from, 12),
                     safe_truncate(&account_to, 12),
                     safe_truncate(&category, 16),
@@ -386,7 +432,7 @@ fn generate_output(
                 let tx_type = format!("{}", tx.tx_type);
                 let amount = tx.amount.to_string();
                 let currency = &tx.currency;
-                
+
                 let account_from = if show_ids {
                     tx.account_from_id.clone()
                 } else {
@@ -395,15 +441,22 @@ fn generate_output(
                         .cloned()
                         .unwrap_or_else(|| tx.account_from_id.clone())
                 };
-                
-                let account_to = tx.account_to_id.as_deref().map(|id| {
-                    if show_ids {
-                        id.to_string()
-                    } else {
-                        account_map.get(id).cloned().unwrap_or_else(|| id.to_string())
-                    }
-                }).unwrap_or_default();
-                
+
+                let account_to = tx
+                    .account_to_id
+                    .as_deref()
+                    .map(|id| {
+                        if show_ids {
+                            id.to_string()
+                        } else {
+                            account_map
+                                .get(id)
+                                .cloned()
+                                .unwrap_or_else(|| id.to_string())
+                        }
+                    })
+                    .unwrap_or_default();
+
                 let category = if show_ids {
                     tx.category_id.clone()
                 } else {
@@ -412,7 +465,7 @@ fn generate_output(
                         .cloned()
                         .unwrap_or_else(|| tx.category_id.clone())
                 };
-                
+
                 let description = tx.description.clone().unwrap_or_default();
                 let short_id = format_short_id(&tx.id);
 
@@ -444,5 +497,3 @@ fn escape_csv_field(field: &str) -> String {
         field.to_string()
     }
 }
-
-

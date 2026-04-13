@@ -5,7 +5,7 @@ pub mod transaction;
 pub mod types;
 
 pub use account::{Account, AccountType};
-pub use category::{CategoryData, CategoryRecord, CategoryTree, utils as category_utils};
+pub use category::{utils as category_utils, CategoryData, CategoryRecord, CategoryTree};
 pub use tag::Tag;
 pub use transaction::Transaction;
 pub use types::{TxSource, TxType};

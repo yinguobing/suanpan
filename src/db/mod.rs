@@ -1,3 +1,6 @@
 pub mod surreal;
 
-pub use surreal::{Database, MonthlyStats, PeriodStats, AccountStats, HierarchicalCategoryStats, TrendStats, TrendPeriod};
+pub use surreal::{
+    AccountStats, Database, HierarchicalCategoryStats, MonthlyStats, PeriodStats, TrendPeriod,
+    TrendStats,
+};

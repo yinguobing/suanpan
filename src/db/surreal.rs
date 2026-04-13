@@ -1,11 +1,11 @@
 use chrono::{DateTime, Datelike, NaiveDate, Utc};
-use surrealdb::Datetime;
 use rust_decimal::Decimal;
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use surrealdb::engine::local::SurrealKv;
+use surrealdb::Datetime;
 use surrealdb::RecordId;
 use surrealdb::Surreal;
-use std::path::Path;
 
 use crate::error::{FinanceError, Result};
 use crate::models::{Account, CategoryRecord, Tag, Transaction, TxType};
@@ -306,9 +306,7 @@ impl Database {
             format!("WHERE {}", conditions.join(" AND "))
         };
 
-        let limit_clause = limit
-            .map(|l| format!(" LIMIT {}", l))
-            .unwrap_or_default();
+        let limit_clause = limit.map(|l| format!(" LIMIT {}", l)).unwrap_or_default();
 
         let sql = format!(
             "SELECT * FROM transaction {} ORDER BY timestamp DESC{}",
@@ -360,11 +358,7 @@ impl Database {
     }
 
     /// 获取月度统计
-    pub async fn get_monthly_stats(
-        &self,
-        year: i32,
-        month: u32,
-    ) -> Result<MonthlyStats> {
+    pub async fn get_monthly_stats(&self, year: i32, month: u32) -> Result<MonthlyStats> {
         let start = NaiveDate::from_ymd_opt(year, month, 1)
             .ok_or_else(|| FinanceError::Validation("无效的日期".to_string()))?;
         let end = if month == 12 {
@@ -396,10 +390,8 @@ impl Database {
 
         // 查询所有分类以获取名称映射
         let categories = self.list_categories().await?;
-        let category_name_map: std::collections::HashMap<String, String> = categories
-            .into_iter()
-            .map(|c| (c.id, c.name))
-            .collect();
+        let category_name_map: std::collections::HashMap<String, String> =
+            categories.into_iter().map(|c| (c.id, c.name)).collect();
 
         for tx in &transactions {
             match tx.tx_type {
@@ -455,10 +447,8 @@ impl Database {
 
         // 查询所有分类以获取名称映射
         let categories = self.list_categories().await?;
-        let category_name_map: std::collections::HashMap<String, String> = categories
-            .into_iter()
-            .map(|c| (c.id, c.name))
-            .collect();
+        let category_name_map: std::collections::HashMap<String, String> =
+            categories.into_iter().map(|c| (c.id, c.name)).collect();
 
         for tx in &transactions {
             match tx.tx_type {
@@ -507,7 +497,8 @@ impl Database {
             conditions.push("timestamp < $to".to_string());
         }
         if account_id.is_some() {
-            conditions.push("(account_from_id = $account_id OR account_to_id = $account_id)".to_string());
+            conditions
+                .push("(account_from_id = $account_id OR account_to_id = $account_id)".to_string());
         }
 
         let where_clause = if conditions.is_empty() {
@@ -517,7 +508,7 @@ impl Database {
         };
 
         let sql = format!("SELECT * FROM transaction {}", where_clause);
-        
+
         let mut query = self.db.query(&sql);
         if let Some(f) = from {
             query = query.bind(("from", Datetime::from(f)));
@@ -534,10 +525,8 @@ impl Database {
 
         // 获取所有账户信息
         let accounts = self.list_accounts().await?;
-        let account_map: HashMap<String, String> = accounts
-            .into_iter()
-            .map(|a| (a.id, a.name))
-            .collect();
+        let account_map: HashMap<String, String> =
+            accounts.into_iter().map(|a| (a.id, a.name)).collect();
 
         // 统计每个账户的数据
         let mut stats_map: HashMap<String, (String, Decimal, Decimal, usize)> = HashMap::new();
@@ -548,7 +537,7 @@ impl Database {
                 let entry = stats_map
                     .entry(tx.account_from_id.clone())
                     .or_insert_with(|| (from_name.clone(), Decimal::ZERO, Decimal::ZERO, 0));
-                
+
                 match tx.tx_type {
                     crate::models::TxType::Expense | crate::models::TxType::Transfer => {
                         entry.2 += tx.amount; // 支出/转出
@@ -564,7 +553,7 @@ impl Database {
                     let entry = stats_map
                         .entry(to_id.clone())
                         .or_insert_with(|| (to_name.clone(), Decimal::ZERO, Decimal::ZERO, 0));
-                    
+
                     match tx.tx_type {
                         crate::models::TxType::Income | crate::models::TxType::Transfer => {
                             entry.1 += tx.amount; // 收入/转入
@@ -596,7 +585,7 @@ impl Database {
     }
 
     /// 获取层级分类统计
-    /// 
+    ///
     /// 返回按层级组织的分类统计，子分类金额会自动汇总到父分类
     pub async fn get_hierarchical_category_stats(
         &self,
@@ -607,18 +596,18 @@ impl Database {
 
         // 1. 获取所有分类
         let categories = self.list_categories().await?;
-        
+
         // 构建分类ID到分类信息的映射
         let mut category_map: HashMap<String, (String, Option<String>, u32)> = HashMap::new();
         // 构建父分类到子分类列表的映射
         let mut children_map: HashMap<String, Vec<String>> = HashMap::new();
-        
+
         for cat in &categories {
             category_map.insert(
                 cat.id.clone(),
                 (cat.name.clone(), cat.parent_id.clone(), cat.level),
             );
-            
+
             if let Some(ref parent_id) = cat.parent_id {
                 children_map
                     .entry(parent_id.clone())
@@ -658,7 +647,9 @@ impl Database {
         let mut direct_amounts: HashMap<String, Decimal> = HashMap::new();
         for tx in &transactions {
             if matches!(tx.tx_type, crate::models::TxType::Expense) {
-                *direct_amounts.entry(tx.category_id.clone()).or_insert(Decimal::ZERO) += tx.amount;
+                *direct_amounts
+                    .entry(tx.category_id.clone())
+                    .or_insert(Decimal::ZERO) += tx.amount;
             }
         }
 
@@ -675,7 +666,7 @@ impl Database {
             total_expense_abs: Decimal,
         ) -> Option<HierarchicalCategoryStats> {
             let (name, _parent_id, level) = category_map.get(category_id)?;
-            
+
             // 获取直接金额（包含负数退款）
             let direct_amount = *direct_amounts.get(category_id).unwrap_or(&Decimal::ZERO);
 
@@ -730,7 +721,7 @@ impl Database {
         ) -> String {
             let mut parts = Vec::new();
             let mut current_id = Some(category_id.to_string());
-            
+
             // 收集从当前节点到根节点的路径（反向）
             while let Some(id) = current_id {
                 if let Some((name, parent_id, _)) = category_map.get(&id) {
@@ -740,7 +731,7 @@ impl Database {
                     break;
                 }
             }
-            
+
             // 反转得到从根到当前节点的路径
             parts.reverse();
             parts.join("/")
@@ -800,7 +791,10 @@ impl Database {
             let sql_dt: surrealdb::sql::Datetime = tx.timestamp.to_owned().into_inner();
             let chrono_ts: DateTime<Utc> = sql_dt.into();
             let period_key = get_period_key(&chrono_ts, &period);
-            let entry = period_data.entry(period_key).or_insert((Decimal::ZERO, Decimal::ZERO, 0usize));
+            let entry =
+                period_data
+                    .entry(period_key)
+                    .or_insert((Decimal::ZERO, Decimal::ZERO, 0usize));
 
             match tx.tx_type {
                 TxType::Income => entry.0 += tx.amount,
@@ -817,7 +811,11 @@ impl Database {
         let mut stats: Vec<TrendStats> = all_periods
             .into_iter()
             .map(|label| {
-                let (income, expense, count) = period_data.get(&label).copied().unwrap_or((Decimal::ZERO, Decimal::ZERO, 0));
+                let (income, expense, count) =
+                    period_data
+                        .get(&label)
+                        .copied()
+                        .unwrap_or((Decimal::ZERO, Decimal::ZERO, 0));
                 TrendStats {
                     period_label: label,
                     income,
@@ -865,7 +863,8 @@ impl Database {
         // category_id -> (period_label -> amount)
         let mut category_data: HashMap<String, HashMap<String, Decimal>> = HashMap::new();
         // 所有周期列表
-        let mut all_periods_set: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+        let mut all_periods_set: std::collections::BTreeSet<String> =
+            std::collections::BTreeSet::new();
 
         for tx in &transactions {
             // surrealdb::Datetime -> surrealdb::sql::Datetime -> chrono::DateTime<Utc>
@@ -874,15 +873,18 @@ impl Database {
             let period_key = get_period_key(&chrono_ts, &period);
             all_periods_set.insert(period_key.clone());
 
-            let category_path = category_map.get(&tx.category_id).cloned().unwrap_or_else(|| tx.category_id.clone());
-            
+            let category_path = category_map
+                .get(&tx.category_id)
+                .cloned()
+                .unwrap_or_else(|| tx.category_id.clone());
+
             let cat_entry = category_data.entry(category_path).or_default();
             *cat_entry.entry(period_key).or_insert(Decimal::ZERO) += tx.amount;
         }
 
         // 转换为返回格式
         let all_periods: Vec<String> = all_periods_set.into_iter().collect();
-        
+
         let mut result: Vec<(String, Vec<(String, Decimal)>)> = category_data
             .into_iter()
             .map(|(category_id, period_map)| {
@@ -917,9 +919,7 @@ impl Database {
     async fn find_by_short_id(&self, short_id: &str) -> Result<Option<(RecordId, Transaction)>> {
         // 短 ID 应该是 12 位字母数字
         if short_id.len() != 12 {
-            return Err(FinanceError::Validation(
-                "短 ID 应为 12 位字符".to_string(),
-            ));
+            return Err(FinanceError::Validation("短 ID 应为 12 位字符".to_string()));
         }
 
         // 将 RecordId 转为字符串后比较前 12 位
@@ -938,9 +938,10 @@ impl Database {
         } else {
             // 返回第一个匹配的记录
             let tx = transactions.into_iter().next().unwrap();
-            let id = tx.id.clone().ok_or_else(|| {
-                FinanceError::Unknown("交易记录缺少 ID".to_string())
-            })?;
+            let id = tx
+                .id
+                .clone()
+                .ok_or_else(|| FinanceError::Unknown("交易记录缺少 ID".to_string()))?;
             Ok(Some((id, tx)))
         }
     }
@@ -1014,7 +1015,7 @@ impl Database {
 
         // 使用 MERGE 进行部分更新
         let sql = format!("UPDATE {} MERGE $data", id.to_string());
-        
+
         let mut result = self
             .db
             .query(&sql)
@@ -1041,7 +1042,9 @@ impl Database {
             .await
             .map_err(FinanceError::Database)?;
         // 重新查询获取创建的记录
-        self.get_account(&id).await?.ok_or_else(|| FinanceError::Unknown("创建账户失败".to_string()))
+        self.get_account(&id)
+            .await?
+            .ok_or_else(|| FinanceError::Unknown("创建账户失败".to_string()))
     }
 
     /// 根据ID获取账户
@@ -1073,12 +1076,12 @@ impl Database {
     /// 根据名称查找账户，如果不存在则创建（默认类型为 Other）
     pub async fn find_or_create_account_by_name(&self, name: &str) -> Result<Account> {
         use crate::models::{Account, AccountType};
-        
+
         // 先查找
         if let Some(account) = self.find_account_by_name(name).await? {
             return Ok(account);
         }
-        
+
         // 不存在则创建（默认类型为 Other）
         let id = generate_id("acc");
         let account = Account::new(id, name, AccountType::Other);
@@ -1149,7 +1152,9 @@ impl Database {
             .await
             .map_err(FinanceError::Database)?;
         // 重新查询获取创建的记录
-        self.get_category(&id).await?.ok_or_else(|| FinanceError::Unknown("创建分类失败".to_string()))
+        self.get_category(&id)
+            .await?
+            .ok_or_else(|| FinanceError::Unknown("创建分类失败".to_string()))
     }
 
     /// 根据ID获取分类
@@ -1182,32 +1187,38 @@ impl Database {
     pub async fn find_or_create_category_by_path(&self, full_path: &str) -> Result<CategoryRecord> {
         self.find_or_create_category_by_path_impl(full_path).await
     }
-    
+
     /// 内部实现（boxed to avoid recursion in async）
-    fn find_or_create_category_by_path_impl<'a>(&'a self, full_path: &'a str) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<CategoryRecord>> + Send + 'a>> {
+    fn find_or_create_category_by_path_impl<'a>(
+        &'a self,
+        full_path: &'a str,
+    ) -> std::pin::Pin<Box<dyn std::future::Future<Output = Result<CategoryRecord>> + Send + 'a>>
+    {
         Box::pin(async move {
             // 先查找
             if let Some(category) = self.get_category_by_path(full_path).await? {
                 return Ok(category);
             }
-            
+
             // 解析路径
             let parts: Vec<&str> = full_path.split('/').collect();
             let name = parts.last().unwrap_or(&"").to_string();
-            
+
             // 查找或创建父分类
             let parent_id = if parts.len() > 1 {
-                let parent_path = parts[..parts.len()-1].join("/");
-                let parent = self.find_or_create_category_by_path_impl(&parent_path).await?;
+                let parent_path = parts[..parts.len() - 1].join("/");
+                let parent = self
+                    .find_or_create_category_by_path_impl(&parent_path)
+                    .await?;
                 Some(parent.id)
             } else {
                 None
             };
-            
+
             // 创建当前分类
             use crate::models::CategoryRecord;
             use surrealdb::Datetime;
-            
+
             let level = parts.len() as u32;
             let id = generate_id("cat");
             let category = CategoryRecord {
@@ -1252,7 +1263,9 @@ impl Database {
         };
 
         // 构建新的full_path
-        let new_full_path = if let Some(parent_path) = crate::models::category_utils::parent_path(&old_category.full_path) {
+        let new_full_path = if let Some(parent_path) =
+            crate::models::category_utils::parent_path(&old_category.full_path)
+        {
             format!("{}/{}", parent_path, name)
         } else {
             name.to_string()
@@ -1271,7 +1284,8 @@ impl Database {
         let updated: Option<CategoryRecord> = result.take(0).map_err(FinanceError::Database)?;
 
         // 级联更新所有子分类的full_path
-        self.update_child_category_paths(&old_category.full_path, &new_full_path).await?;
+        self.update_child_category_paths(&old_category.full_path, &new_full_path)
+            .await?;
 
         Ok(updated)
     }
@@ -1406,7 +1420,9 @@ impl Database {
             .await
             .map_err(FinanceError::Database)?;
         // 重新查询获取创建的记录
-        self.get_tag(&id).await?.ok_or_else(|| FinanceError::Unknown("创建标签失败".to_string()))
+        self.get_tag(&id)
+            .await?
+            .ok_or_else(|| FinanceError::Unknown("创建标签失败".to_string()))
     }
 
     /// 根据ID获取标签
@@ -1441,7 +1457,7 @@ impl Database {
         if let Some(tag) = self.find_tag_by_name(name).await? {
             return Ok(tag);
         }
-        
+
         // 不存在则创建
         let id = generate_id("tag");
         let sql = "CREATE type::thing('tag', $id) CONTENT { name: $name, created_at: time::now() }";
@@ -1452,7 +1468,7 @@ impl Database {
             .bind(("name", name.to_string()))
             .await
             .map_err(FinanceError::Database)?;
-        
+
         let tag: Option<Tag> = result.take(0).map_err(FinanceError::Database)?;
         tag.ok_or_else(|| FinanceError::Unknown("创建标签失败".to_string()))
     }
@@ -1483,7 +1499,7 @@ impl Database {
     pub async fn delete_tag(&self, id: &str) -> Result<bool> {
         // 先从所有交易记录中移除该标签ID
         let _removed = self.remove_tag_from_transactions(id).await?;
-        
+
         let sql = "DELETE FROM tag WHERE id = type::thing('tag', $id)";
         let mut result = self
             .db
@@ -1559,7 +1575,7 @@ impl Database {
 
         // 1. 获取使用旧字段的交易记录
         let old_transactions = self.get_old_transactions().await?;
-        
+
         if old_transactions.is_empty() {
             return Ok(stats);
         }
@@ -1595,7 +1611,8 @@ impl Database {
                 account_map.insert(name, existing.id);
             } else if !dry_run {
                 let id = format!("acc_{}", nanoid::nanoid!(8));
-                let account = crate::models::Account::new(&id, &name, crate::models::AccountType::Other);
+                let account =
+                    crate::models::Account::new(&id, &name, crate::models::AccountType::Other);
                 self.create_account(account).await?;
                 account_map.insert(name, id);
                 stats.accounts_created += 1;
@@ -1640,18 +1657,24 @@ impl Database {
         // 6. 更新交易记录
         if !dry_run {
             for old_tx in old_transactions {
-                let account_from_id = account_map.get(&old_tx.account_from)
+                let account_from_id = account_map
+                    .get(&old_tx.account_from)
                     .cloned()
                     .unwrap_or_default();
-                
-                let account_to_id = old_tx.account_to.as_ref()
+
+                let account_to_id = old_tx
+                    .account_to
+                    .as_ref()
                     .and_then(|n| account_map.get(n).cloned());
-                
-                let category_id = category_map.get(&old_tx.category)
+
+                let category_id = category_map
+                    .get(&old_tx.category)
                     .cloned()
                     .unwrap_or_default();
-                
-                let tag_ids: Vec<String> = old_tx.tags.iter()
+
+                let tag_ids: Vec<String> = old_tx
+                    .tags
+                    .iter()
                     .filter_map(|t| tag_map.get(t).cloned())
                     .collect();
 
@@ -1684,7 +1707,7 @@ impl Database {
             FROM transaction 
             WHERE account_from IS NOT NULL AND account_from_id IS NONE
         "#;
-        
+
         let mut result = self.db.query(sql).await.map_err(FinanceError::Database)?;
         let transactions: Vec<OldTransaction> = result.take(0).map_err(FinanceError::Database)?;
         Ok(transactions)
@@ -1744,9 +1767,9 @@ pub struct HierarchicalCategoryStats {
     pub category_name: String,
     pub full_path: String,
     pub level: u32,
-    pub direct_amount: Decimal,      // 直接属于该分类的金额（不含子分类）
-    pub total_amount: Decimal,       // 汇总金额（含所有子分类）
-    pub percentage: Decimal,         // 占总支出的百分比
+    pub direct_amount: Decimal, // 直接属于该分类的金额（不含子分类）
+    pub total_amount: Decimal,  // 汇总金额（含所有子分类）
+    pub percentage: Decimal,    // 占总支出的百分比
     pub children: Vec<HierarchicalCategoryStats>,
 }
 
@@ -1773,7 +1796,7 @@ pub enum TrendPeriod {
 /// 趋势统计项
 #[derive(Debug)]
 pub struct TrendStats {
-    pub period_label: String,    // 周期标签，如 "2026-01" 或 "2026-W01"
+    pub period_label: String, // 周期标签，如 "2026-01" 或 "2026-W01"
     pub income: Decimal,
     pub expense: Decimal,
     pub transaction_count: usize,
@@ -1826,9 +1849,15 @@ fn generate_periods(from: DateTime<Utc>, to: DateTime<Utc>, period: &TrendPeriod
         // 移动到下一个周期
         current = match period {
             TrendPeriod::Day => current.succ_opt().unwrap_or(current),
-            TrendPeriod::Week => current.checked_add_days(chrono::Days::new(7)).unwrap_or(current),
-            TrendPeriod::Month => current.checked_add_months(chrono::Months::new(1)).unwrap_or(current),
-            TrendPeriod::Quarter => current.checked_add_months(chrono::Months::new(3)).unwrap_or(current),
+            TrendPeriod::Week => current
+                .checked_add_days(chrono::Days::new(7))
+                .unwrap_or(current),
+            TrendPeriod::Month => current
+                .checked_add_months(chrono::Months::new(1))
+                .unwrap_or(current),
+            TrendPeriod::Quarter => current
+                .checked_add_months(chrono::Months::new(3))
+                .unwrap_or(current),
             TrendPeriod::Year => current.with_year(current.year() + 1).unwrap_or(current),
         };
     }

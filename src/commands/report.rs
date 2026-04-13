@@ -19,7 +19,7 @@ fn get_chinese_font() -> Option<&'static str> {
         "/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc",
         "/usr/share/fonts/noto-cjk/NotoSansCJK-Regular.ttc",
     ];
-    
+
     for path in &font_paths {
         if std::path::Path::new(path).exists() {
             return Some(path);
@@ -31,8 +31,12 @@ fn get_chinese_font() -> Option<&'static str> {
 /// 创建支持中文的字体描述
 fn chinese_font(size: f64) -> FontDesc<'static> {
     if let Some(_font_path) = get_chinese_font() {
-        FontDesc::new(FontFamily::Name("Noto Sans CJK SC"), size, FontStyle::Normal)
-            .to_owned()
+        FontDesc::new(
+            FontFamily::Name("Noto Sans CJK SC"),
+            size,
+            FontStyle::Normal,
+        )
+        .to_owned()
     } else {
         ("sans-serif", size).into_font()
     }
@@ -105,7 +109,7 @@ pub async fn execute(db: &Database, args: ReportArgs) -> Result<()> {
 
     // 获取当月交易数据
     let transactions = db.query_by_date_range(start_dt, end_dt).await?;
-    
+
     if transactions.is_empty() {
         println!("[WARN] {} 月暂无交易记录", month);
         return Ok(());
@@ -125,7 +129,13 @@ pub async fn execute(db: &Database, args: ReportArgs) -> Result<()> {
 
     // 1. 生成支出分类饼图
     let pie_chart_path = args.output.join(format!("expense_pie_{}.png", month));
-    generate_expense_pie_chart(&transactions, &category_map, &pie_chart_path, args.width, args.height)?;
+    generate_expense_pie_chart(
+        &transactions,
+        &category_map,
+        &pie_chart_path,
+        args.width,
+        args.height,
+    )?;
     println!("   ✅ 支出分类饼图: {}", pie_chart_path.display());
 
     // 2. 生成月度收支趋势图（最近12个月）
@@ -143,13 +153,23 @@ pub async fn execute(db: &Database, args: ReportArgs) -> Result<()> {
     // 4. 生成 HTML 报表（除非指定 --charts-only）
     if !args.charts_only {
         let html_path = args.output.join(format!("report_{}.html", month));
-        generate_html_report(&transactions, &monthly_stats, &category_map, &html_path, &month, &args.output)?;
+        generate_html_report(
+            &transactions,
+            &monthly_stats,
+            &category_map,
+            &html_path,
+            &month,
+            &args.output,
+        )?;
         println!("   [OK] HTML 报表: {}", html_path.display());
     }
 
     println!("\n[完成] 报表生成完成！");
     if !args.charts_only {
-        println!("   请用浏览器打开: {}", args.output.join(format!("report_{}.html", month)).display());
+        println!(
+            "   请用浏览器打开: {}",
+            args.output.join(format!("report_{}.html", month)).display()
+        );
     }
 
     Ok(())
@@ -164,12 +184,12 @@ fn parse_month(month: &str) -> Result<(i32, u32)> {
             month
         )));
     }
-    let year = parts[0].parse::<i32>().map_err(|e| {
-        crate::error::FinanceError::Validation(format!("无效的年份: {}", e))
-    })?;
-    let mon = parts[1].parse::<u32>().map_err(|e| {
-        crate::error::FinanceError::Validation(format!("无效的月份: {}", e))
-    })?;
+    let year = parts[0]
+        .parse::<i32>()
+        .map_err(|e| crate::error::FinanceError::Validation(format!("无效的年份: {}", e)))?;
+    let mon = parts[1]
+        .parse::<u32>()
+        .map_err(|e| crate::error::FinanceError::Validation(format!("无效的月份: {}", e)))?;
     Ok((year, mon))
 }
 
@@ -204,7 +224,7 @@ fn calculate_expense_by_category(
 fn plot_err<E: std::fmt::Display>(e: E) -> crate::error::FinanceError {
     crate::error::FinanceError::Io(std::io::Error::new(
         std::io::ErrorKind::Other,
-        format!("图表生成错误: {}", e)
+        format!("图表生成错误: {}", e),
     ))
 }
 
@@ -217,7 +237,7 @@ fn generate_expense_pie_chart(
     height: u32,
 ) -> Result<()> {
     let stats = calculate_expense_by_category(transactions, category_map);
-    
+
     if stats.is_empty() {
         return Ok(());
     }
@@ -274,7 +294,7 @@ fn generate_expense_pie_chart(
         let sweep_angle = percentage * 2.0 * std::f64::consts::PI;
 
         let color = colors[i % colors.len()];
-        
+
         // 绘制扇形 - 使用多边形近似圆弧
         let mut points: Vec<(i32, i32)> = vec![center];
         let steps = 20;
@@ -285,8 +305,9 @@ fn generate_expense_pie_chart(
             points.push((x, y));
         }
         points.push(center);
-        
-        root.draw(&Polygon::new(points, color.filled())).map_err(plot_err)?;
+
+        root.draw(&Polygon::new(points, color.filled()))
+            .map_err(plot_err)?;
 
         // 绘制标签线
         let mid_angle = current_angle + sweep_angle / 2.0;
@@ -300,7 +321,8 @@ fn generate_expense_pie_chart(
             format!("{} {}", label, percentage_text),
             (label_x, label_y),
             label_font.color(&BLACK),
-        )).map_err(plot_err)?;
+        ))
+        .map_err(plot_err)?;
 
         current_angle += sweep_angle;
     }
@@ -311,14 +333,19 @@ fn generate_expense_pie_chart(
         format!("支出分类分布 (总计: ¥{:.2})", total_f64),
         (width as i32 / 2 - 100, 30),
         title_font.color(&BLACK),
-    )).map_err(plot_err)?;
+    ))
+    .map_err(plot_err)?;
 
     root.present().map_err(plot_err)?;
     Ok(())
 }
 
 /// 获取最近12个月的统计数据
-async fn get_monthly_stats(db: &Database, current_year: i32, current_month: u32) -> Result<Vec<MonthlyStat>> {
+async fn get_monthly_stats(
+    db: &Database,
+    current_year: i32,
+    current_month: u32,
+) -> Result<Vec<MonthlyStat>> {
     let mut stats = Vec::new();
 
     for i in 0..12 {
@@ -392,7 +419,8 @@ fn generate_trend_chart(
         .build_cartesian_2d(0..stats.len() - 1, 0.0..max_value)
         .map_err(plot_err)?;
 
-    chart.configure_mesh()
+    chart
+        .configure_mesh()
         .x_labels(stats.len())
         .x_label_formatter(&|x| {
             if *x < stats.len() {
@@ -415,7 +443,8 @@ fn generate_trend_chart(
         })
         .collect();
 
-    chart.draw_series(LineSeries::new(income_points, &GREEN))
+    chart
+        .draw_series(LineSeries::new(income_points, &GREEN))
         .map_err(plot_err)?
         .label("收入")
         .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 10, y)], GREEN));
@@ -430,12 +459,14 @@ fn generate_trend_chart(
         })
         .collect();
 
-    chart.draw_series(LineSeries::new(expense_points, &RED))
+    chart
+        .draw_series(LineSeries::new(expense_points, &RED))
         .map_err(plot_err)?
         .label("支出")
         .legend(|(x, y)| PathElement::new(vec![(x, y), (x + 10, y)], RED));
 
-    chart.configure_series_labels()
+    chart
+        .configure_series_labels()
         .background_style(WHITE.mix(0.8))
         .border_style(BLACK)
         .draw()
@@ -455,9 +486,11 @@ fn calculate_daily_stats(transactions: &[Transaction], year: i32, month: u32) ->
         let utc_dt: chrono::DateTime<chrono::Utc> = sql_dt.into();
         let local_dt: chrono::DateTime<Local> = utc_dt.into();
         let naive_date = local_dt.date_naive();
-        
+
         if naive_date.year() == year && naive_date.month() == month {
-            let entry = stats.entry(naive_date).or_insert((Decimal::ZERO, Decimal::ZERO));
+            let entry = stats
+                .entry(naive_date)
+                .or_insert((Decimal::ZERO, Decimal::ZERO));
             match tx.tx_type {
                 TxType::Income => entry.0 += tx.amount,
                 TxType::Expense => entry.1 += tx.amount,
@@ -525,9 +558,14 @@ fn generate_daily_chart(
         .map_err(plot_err)?;
 
     // 计算标签位置
-    let label_step = if stats.len() <= 10 { 1 } else { stats.len() / 10 };
+    let label_step = if stats.len() <= 10 {
+        1
+    } else {
+        stats.len() / 10
+    };
 
-    chart.configure_mesh()
+    chart
+        .configure_mesh()
         .x_labels(stats.len().min(10))
         .x_label_formatter(&|x| {
             let idx = *x as usize;
@@ -553,37 +591,59 @@ fn generate_daily_chart(
         if income > 0.0 {
             let x_start = x - bar_width;
             let x_end = x;
-            chart.draw_series(std::iter::once(
-                Rectangle::new([(x_start, 0.0), (x_end, income)], GREEN.filled())
-            )).map_err(plot_err)?;
+            chart
+                .draw_series(std::iter::once(Rectangle::new(
+                    [(x_start, 0.0), (x_end, income)],
+                    GREEN.filled(),
+                )))
+                .map_err(plot_err)?;
         }
 
         // 支出柱（红色）
         if expense > 0.0 {
             let x_start = x;
             let x_end = x + bar_width;
-            chart.draw_series(std::iter::once(
-                Rectangle::new([(x_start, 0.0), (x_end, expense)], RED.filled())
-            )).map_err(plot_err)?;
+            chart
+                .draw_series(std::iter::once(Rectangle::new(
+                    [(x_start, 0.0), (x_end, expense)],
+                    RED.filled(),
+                )))
+                .map_err(plot_err)?;
         }
     }
 
     // 图例 - 使用 i32 坐标
     let legend_y: i32 = 20;
     root.draw(&Rectangle::new(
-        [(width as i32 - 150, legend_y), (width as i32 - 130, legend_y + 15)],
+        [
+            (width as i32 - 150, legend_y),
+            (width as i32 - 130, legend_y + 15),
+        ],
         GREEN.filled(),
-    )).map_err(plot_err)?;
+    ))
+    .map_err(plot_err)?;
     let legend_font = chinese_font(14.0);
-    root.draw(&Text::new("收入", (width as i32 - 125, legend_y + 2), legend_font.clone()))
-        .map_err(plot_err)?;
+    root.draw(&Text::new(
+        "收入",
+        (width as i32 - 125, legend_y + 2),
+        legend_font.clone(),
+    ))
+    .map_err(plot_err)?;
 
     root.draw(&Rectangle::new(
-        [(width as i32 - 70, legend_y), (width as i32 - 50, legend_y + 15)],
+        [
+            (width as i32 - 70, legend_y),
+            (width as i32 - 50, legend_y + 15),
+        ],
         RED.filled(),
-    )).map_err(plot_err)?;
-    root.draw(&Text::new("支出", (width as i32 - 45, legend_y + 2), legend_font))
-        .map_err(plot_err)?;
+    ))
+    .map_err(plot_err)?;
+    root.draw(&Text::new(
+        "支出",
+        (width as i32 - 45, legend_y + 2),
+        legend_font,
+    ))
+    .map_err(plot_err)?;
 
     root.present().map_err(plot_err)?;
     Ok(())

@@ -3,7 +3,7 @@ use clap::Args;
 use comfy_table::Table;
 use rust_decimal::Decimal;
 
-use crate::db::surreal::{Database, TrendStats, TrendPeriod};
+use crate::db::surreal::{Database, TrendPeriod, TrendStats};
 use crate::error::Result;
 
 /// 趋势分析
@@ -69,9 +69,7 @@ pub async fn execute(db: &Database, args: TrendArgs) -> Result<()> {
 
     // 如果按分类展示
     if args.by_category {
-        let category_trends = db
-            .get_category_trend_stats(period, from_dt, to_dt)
-            .await?;
+        let category_trends = db.get_category_trend_stats(period, from_dt, to_dt).await?;
         print_category_trends(&category_trends, &period, args.show_ids);
     }
 
@@ -96,9 +94,7 @@ fn print_trend_stats(
 
     println!(
         "\n[趋势] {}趋势分析 ({} 至 {})\n",
-        period_name,
-        from_date,
-        to_date
+        period_name, from_date, to_date
     );
 
     if stats.is_empty() {
@@ -256,9 +252,6 @@ fn parse_period(period: &str) -> Result<TrendPeriod> {
 /// 解析日期字符串（YYYY-MM-DD）
 fn parse_date(date_str: &str) -> Result<NaiveDate> {
     NaiveDate::parse_from_str(date_str, "%Y-%m-%d").map_err(|_| {
-        crate::error::FinanceError::Parse(format!(
-            "日期格式错误：'{}'，应为 YYYY-MM-DD",
-            date_str
-        ))
+        crate::error::FinanceError::Parse(format!("日期格式错误：'{}'，应为 YYYY-MM-DD", date_str))
     })
 }

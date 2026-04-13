@@ -87,7 +87,10 @@ mod tests {
         assert_eq!(TxType::from_str("income").unwrap(), TxType::Income);
         assert_eq!(TxType::from_str("transfer").unwrap(), TxType::Transfer);
         assert_eq!(TxType::from_str("debtchange").unwrap(), TxType::DebtChange);
-        assert_eq!(TxType::from_str("creditchange").unwrap(), TxType::CreditChange);
+        assert_eq!(
+            TxType::from_str("creditchange").unwrap(),
+            TxType::CreditChange
+        );
 
         // 中文
         assert_eq!(TxType::from_str("支出").unwrap(), TxType::Expense);

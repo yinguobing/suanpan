@@ -9,7 +9,7 @@ pub struct MigrateArgs {
     /// 预览模式（不实际执行）
     #[arg(long)]
     pub dry_run: bool,
-    
+
     /// 跳过备份提示
     #[arg(long)]
     pub skip_backup: bool,

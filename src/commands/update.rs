@@ -149,9 +149,15 @@ mod tests {
         // 英文
         assert!(matches!(parse_tx_type("expense").unwrap(), TxType::Expense));
         assert!(matches!(parse_tx_type("income").unwrap(), TxType::Income));
-        assert!(matches!(parse_tx_type("transfer").unwrap(), TxType::Transfer));
+        assert!(matches!(
+            parse_tx_type("transfer").unwrap(),
+            TxType::Transfer
+        ));
         assert!(matches!(parse_tx_type("debt").unwrap(), TxType::DebtChange));
-        assert!(matches!(parse_tx_type("credit").unwrap(), TxType::CreditChange));
+        assert!(matches!(
+            parse_tx_type("credit").unwrap(),
+            TxType::CreditChange
+        ));
 
         // 中文
         assert!(matches!(parse_tx_type("支出").unwrap(), TxType::Expense));

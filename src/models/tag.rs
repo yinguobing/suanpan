@@ -64,11 +64,11 @@ mod tests {
 
     #[test]
     fn test_is_valid_color() {
-        assert!(Tag::is_valid_color("#FF0000"));  // RRGGBB
-        assert!(Tag::is_valid_color("#F00"));     // RGB
-        assert!(Tag::is_valid_color("#ff0000"));  // 小写
-        assert!(!Tag::is_valid_color("FF0000"));  // 缺少#
+        assert!(Tag::is_valid_color("#FF0000")); // RRGGBB
+        assert!(Tag::is_valid_color("#F00")); // RGB
+        assert!(Tag::is_valid_color("#ff0000")); // 小写
+        assert!(!Tag::is_valid_color("FF0000")); // 缺少#
         assert!(!Tag::is_valid_color("#GG0000")); // 非法字符
-        assert!(!Tag::is_valid_color("#FF00"));   // 长度不对
+        assert!(!Tag::is_valid_color("#FF00")); // 长度不对
     }
 }

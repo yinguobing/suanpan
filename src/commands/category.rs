@@ -2,7 +2,7 @@ use clap::{Args, Subcommand};
 
 use crate::db::surreal::Database;
 use crate::error::Result;
-use crate::models::{CategoryRecord, category_utils};
+use crate::models::{category_utils, CategoryRecord};
 
 /// 分类管理子命令
 #[derive(Subcommand)]
@@ -87,7 +87,7 @@ async fn list_categories(db: &Database, args: ListArgs) -> Result<()> {
     for cat in sorted {
         let parent = cat.parent_id.as_deref().unwrap_or("-");
         let level = cat.level.to_string();
-        
+
         if args.show_ids {
             println!(
                 "{:<20} {:<8} {:<20} {}",
@@ -116,7 +116,10 @@ async fn show_tree(db: &Database, args: TreeArgs) -> Result<()> {
     println!("\n[列表] 分类树\n");
 
     // 构建树结构
-    let mut roots: Vec<&CategoryRecord> = categories.iter().filter(|c| c.parent_id.is_none()).collect();
+    let mut roots: Vec<&CategoryRecord> = categories
+        .iter()
+        .filter(|c| c.parent_id.is_none())
+        .collect();
     roots.sort_by(|a, b| a.name.cmp(&b.name));
 
     for root in roots {
@@ -252,9 +255,7 @@ async fn rename_category(db: &Database, args: CategoryRenameArgs) -> Result<()> 
 
 async fn remove_category(db: &Database, args: CategoryRemoveArgs) -> Result<()> {
     // 尝试按ID或路径查找
-    let category = db
-        .get_category_by_path(&args.path_or_id)
-        .await?;
+    let category = db.get_category_by_path(&args.path_or_id).await?;
 
     let category = match category {
         Some(c) => c,

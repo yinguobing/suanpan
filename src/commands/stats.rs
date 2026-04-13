@@ -87,9 +87,10 @@ pub async fn execute(db: &Database, args: StatsArgs) -> Result<()> {
             } else if let Some(account) = db.find_account_by_name(acc).await? {
                 Some(account.id)
             } else {
-                return Err(crate::error::FinanceError::Validation(
-                    format!("未找到账户: {}", acc)
-                ));
+                return Err(crate::error::FinanceError::Validation(format!(
+                    "未找到账户: {}",
+                    acc
+                )));
             }
         } else {
             None
@@ -287,7 +288,7 @@ fn print_category_breakdown(
 
     let mut categories: Vec<_> = category_breakdown.iter().collect();
     // 按金额降序排序
-    categories.sort_by(|a, b| b.1.1.cmp(&a.1.1));
+    categories.sort_by(|a, b| b.1 .1.cmp(&a.1 .1));
 
     for (category_id, (category_name, amount)) in categories {
         let percentage = if total_expense > Decimal::ZERO {
@@ -353,7 +354,8 @@ fn print_hierarchical_category_stats(
             };
 
             // 汇总金额（与直接金额不同或有子分类时显示）
-            let total_str = if stat.total_amount != stat.direct_amount || !stat.children.is_empty() {
+            let total_str = if stat.total_amount != stat.direct_amount || !stat.children.is_empty()
+            {
                 format!("¥{}", stat.total_amount)
             } else {
                 "-".to_string()
@@ -366,12 +368,7 @@ fn print_hierarchical_category_stats(
                 format!("{}%", stat.percentage)
             };
 
-            table.add_row(vec![
-                display_name,
-                direct_str,
-                total_str,
-                percentage_str,
-            ]);
+            table.add_row(vec![display_name, direct_str, total_str, percentage_str]);
 
             // 递归添加子分类
             if !stat.children.is_empty() {
@@ -425,7 +422,11 @@ fn print_account_stats(
         total_expense += stats.total_expense;
         total_count += stats.transaction_count;
 
-        let net_color = if stats.net_flow >= Decimal::ZERO { "+" } else { "" };
+        let net_color = if stats.net_flow >= Decimal::ZERO {
+            "+"
+        } else {
+            ""
+        };
         let display_name = if show_ids {
             &stats.account_id
         } else {
@@ -490,10 +491,9 @@ fn parse_month(month_str: &str) -> Result<(i32, u32)> {
 
 /// 解析日期字符串（YYYY-MM-DD）
 fn parse_date(date_str: &str) -> Result<NaiveDate> {
-    NaiveDate::parse_from_str(date_str, "%Y-%m-%d")
-        .map_err(|_| crate::error::FinanceError::Parse(
-            format!("日期格式错误：'{}'，应为 YYYY-MM-DD", date_str)
-        ))
+    NaiveDate::parse_from_str(date_str, "%Y-%m-%d").map_err(|_| {
+        crate::error::FinanceError::Parse(format!("日期格式错误：'{}'，应为 YYYY-MM-DD", date_str))
+    })
 }
 
 #[cfg(test)]
@@ -541,14 +541,14 @@ mod tests {
     #[test]
     fn test_parse_date_invalid_format() {
         assert!(parse_date("2025/04/15").is_err());
-        assert!(parse_date("2025-04").is_err());     // 缺少日
+        assert!(parse_date("2025-04").is_err()); // 缺少日
         assert!(parse_date("invalid").is_err());
     }
 
     #[test]
     fn test_parse_date_invalid_date() {
-        assert!(parse_date("2025-02-30").is_err());  // 2月没有30日
-        assert!(parse_date("2025-13-01").is_err());  // 没有13月
-        assert!(parse_date("2025-00-15").is_err());  // 没有0月
+        assert!(parse_date("2025-02-30").is_err()); // 2月没有30日
+        assert!(parse_date("2025-13-01").is_err()); // 没有13月
+        assert!(parse_date("2025-00-15").is_err()); // 没有0月
     }
 }

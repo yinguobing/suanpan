@@ -77,7 +77,10 @@ async fn list_tags(db: &Database) -> Result<()> {
 async fn add_tag(db: &Database, args: TagAddArgs) -> Result<()> {
     // 检查是否已存在同名标签
     if let Some(existing) = db.find_tag_by_name(&args.name).await? {
-        println!("[ERR] 已存在同名标签: {} (ID: {})", existing.name, existing.id);
+        println!(
+            "[ERR] 已存在同名标签: {} (ID: {})",
+            existing.name, existing.id
+        );
         return Ok(());
     }
 
@@ -122,7 +125,10 @@ async fn rename_tag(db: &Database, args: TagRenameArgs) -> Result<()> {
     // 检查新名称是否已被使用
     if let Some(existing) = db.find_tag_by_name(&args.new_name).await? {
         if existing.id != tag.id {
-            println!("[ERR] 名称 '{}' 已被标签 {} 使用", args.new_name, existing.id);
+            println!(
+                "[ERR] 名称 '{}' 已被标签 {} 使用",
+                args.new_name, existing.id
+            );
             return Ok(());
         }
     }

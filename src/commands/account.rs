@@ -110,7 +110,10 @@ async fn list_accounts(db: &Database) -> Result<()> {
 async fn add_account(db: &Database, args: AccountAddArgs) -> Result<()> {
     // 检查是否已存在同名账户
     if let Some(existing) = db.find_account_by_name(&args.name).await? {
-        println!("[ERR] 已存在同名账户: {} (ID: {})", existing.name, existing.id);
+        println!(
+            "[ERR] 已存在同名账户: {} (ID: {})",
+            existing.name, existing.id
+        );
         return Ok(());
     }
 
@@ -151,7 +154,10 @@ async fn rename_account(db: &Database, args: AccountRenameArgs) -> Result<()> {
     // 检查新名称是否已被使用
     if let Some(existing) = db.find_account_by_name(&args.new_name).await? {
         if existing.id != args.id {
-            println!("[ERR] 名称 '{}' 已被账户 {} 使用", args.new_name, existing.id);
+            println!(
+                "[ERR] 名称 '{}' 已被账户 {} 使用",
+                args.new_name, existing.id
+            );
             return Ok(());
         }
     }

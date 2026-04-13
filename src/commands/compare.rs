@@ -21,7 +21,7 @@ pub struct CompareArgs {
 pub async fn execute(db: &Database, args: CompareArgs) -> Result<()> {
     // 解析目标月份
     let (year, month) = parse_month(&args.month)?;
-    
+
     // 解析对比类型
     let compare_type = parse_compare_type(&args.compare_type)?;
 
@@ -67,18 +67,22 @@ pub async fn execute(db: &Database, args: CompareArgs) -> Result<()> {
 
 /// 对比类型
 enum CompareType {
-    Mom,   // 环比（与上月对比）
-    Yoy,   // 同比（与去年同月对比）
-    Both,  // 两者
+    Mom,  // 环比（与上月对比）
+    Yoy,  // 同比（与去年同月对比）
+    Both, // 两者
 }
 
 /// 打印概览
 fn print_overview(stats: &crate::db::surreal::PeriodStats) {
     let mut table = Table::new();
     table.set_header(vec!["项目", "金额", "笔数"]);
-    table.add_row(vec!["总收入", &format!("¥{}", stats.total_income), &stats.transaction_count.to_string()]);
+    table.add_row(vec![
+        "总收入",
+        &format!("¥{}", stats.total_income),
+        &stats.transaction_count.to_string(),
+    ]);
     table.add_row(vec!["总支出", &format!("¥{}", stats.total_expense), ""]);
-    
+
     let net = stats.total_income - stats.total_expense;
     let net_str = if net >= Decimal::ZERO {
         format!("+¥{}", net)
@@ -86,7 +90,7 @@ fn print_overview(stats: &crate::db::surreal::PeriodStats) {
         format!("-¥{}", net.abs())
     };
     table.add_row(vec!["净收支", &net_str, ""]);
-    
+
     println!("{}", table);
     println!();
 }
@@ -173,7 +177,9 @@ async fn print_mom_comparison(
     // 交易笔数对比
     let count_change = target_stats.transaction_count as i64 - prev_stats.transaction_count as i64;
     let count_change_pct = if prev_stats.transaction_count > 0 {
-        (Decimal::from(count_change) / Decimal::from(prev_stats.transaction_count) * Decimal::from(100)).round_dp(1)
+        (Decimal::from(count_change) / Decimal::from(prev_stats.transaction_count)
+            * Decimal::from(100))
+        .round_dp(1)
     } else {
         Decimal::ZERO
     };
@@ -273,7 +279,9 @@ async fn print_yoy_comparison(
     // 交易笔数对比
     let count_change = target_stats.transaction_count as i64 - yoy_stats.transaction_count as i64;
     let count_change_pct = if yoy_stats.transaction_count > 0 {
-        (Decimal::from(count_change) / Decimal::from(yoy_stats.transaction_count) * Decimal::from(100)).round_dp(1)
+        (Decimal::from(count_change) / Decimal::from(yoy_stats.transaction_count)
+            * Decimal::from(100))
+        .round_dp(1)
     } else {
         Decimal::ZERO
     };

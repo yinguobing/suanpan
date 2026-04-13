@@ -82,7 +82,7 @@ pub async fn execute(db: &Database, args: AddArgs) -> Result<()> {
 
     // 查找或创建来源账户
     let account_from = db.find_or_create_account_by_name(&args.from).await?;
-    
+
     // 查找或创建去向账户（可选）
     let account_to_id = if let Some(to_name) = args.to {
         let account_to = db.find_or_create_account_by_name(&to_name).await?;
@@ -90,10 +90,10 @@ pub async fn execute(db: &Database, args: AddArgs) -> Result<()> {
     } else {
         None
     };
-    
+
     // 查找或创建分类
     let category = db.find_or_create_category_by_path(&args.category).await?;
-    
+
     // 查找或创建标签
     let mut tag_ids = Vec::new();
     for tag_name in args.tag {
@@ -118,7 +118,11 @@ pub async fn execute(db: &Database, args: AddArgs) -> Result<()> {
     println!("   ID: {:?}", created.id);
     println!("   类型: {}", created.tx_type);
     println!("   金额: {} {}", created.amount, created.currency);
-    println!("   账户: {} -> {}", created.account_from_id, created.account_to_id.as_deref().unwrap_or("-"));
+    println!(
+        "   账户: {} -> {}",
+        created.account_from_id,
+        created.account_to_id.as_deref().unwrap_or("-")
+    );
     println!("   分类: {}", created.category_id);
     if let Some(desc) = &created.description {
         println!("   描述: {}", desc);
@@ -138,25 +142,70 @@ mod tests {
     #[test]
     fn test_tx_type_arg_from_str() {
         // 英文
-        assert!(matches!(TxTypeArg::from_str("expense").unwrap(), TxTypeArg::Expense));
-        assert!(matches!(TxTypeArg::from_str("income").unwrap(), TxTypeArg::Income));
-        assert!(matches!(TxTypeArg::from_str("transfer").unwrap(), TxTypeArg::Transfer));
-        assert!(matches!(TxTypeArg::from_str("debt").unwrap(), TxTypeArg::DebtChange));
-        assert!(matches!(TxTypeArg::from_str("credit").unwrap(), TxTypeArg::CreditChange));
+        assert!(matches!(
+            TxTypeArg::from_str("expense").unwrap(),
+            TxTypeArg::Expense
+        ));
+        assert!(matches!(
+            TxTypeArg::from_str("income").unwrap(),
+            TxTypeArg::Income
+        ));
+        assert!(matches!(
+            TxTypeArg::from_str("transfer").unwrap(),
+            TxTypeArg::Transfer
+        ));
+        assert!(matches!(
+            TxTypeArg::from_str("debt").unwrap(),
+            TxTypeArg::DebtChange
+        ));
+        assert!(matches!(
+            TxTypeArg::from_str("credit").unwrap(),
+            TxTypeArg::CreditChange
+        ));
 
         // 中文
-        assert!(matches!(TxTypeArg::from_str("支出").unwrap(), TxTypeArg::Expense));
-        assert!(matches!(TxTypeArg::from_str("收入").unwrap(), TxTypeArg::Income));
-        assert!(matches!(TxTypeArg::from_str("转账").unwrap(), TxTypeArg::Transfer));
-        assert!(matches!(TxTypeArg::from_str("债务").unwrap(), TxTypeArg::DebtChange));
-        assert!(matches!(TxTypeArg::from_str("债权").unwrap(), TxTypeArg::CreditChange));
+        assert!(matches!(
+            TxTypeArg::from_str("支出").unwrap(),
+            TxTypeArg::Expense
+        ));
+        assert!(matches!(
+            TxTypeArg::from_str("收入").unwrap(),
+            TxTypeArg::Income
+        ));
+        assert!(matches!(
+            TxTypeArg::from_str("转账").unwrap(),
+            TxTypeArg::Transfer
+        ));
+        assert!(matches!(
+            TxTypeArg::from_str("债务").unwrap(),
+            TxTypeArg::DebtChange
+        ));
+        assert!(matches!(
+            TxTypeArg::from_str("债权").unwrap(),
+            TxTypeArg::CreditChange
+        ));
 
         // 缩写
-        assert!(matches!(TxTypeArg::from_str("e").unwrap(), TxTypeArg::Expense));
-        assert!(matches!(TxTypeArg::from_str("i").unwrap(), TxTypeArg::Income));
-        assert!(matches!(TxTypeArg::from_str("t").unwrap(), TxTypeArg::Transfer));
-        assert!(matches!(TxTypeArg::from_str("d").unwrap(), TxTypeArg::DebtChange));
-        assert!(matches!(TxTypeArg::from_str("c").unwrap(), TxTypeArg::CreditChange));
+        assert!(matches!(
+            TxTypeArg::from_str("e").unwrap(),
+            TxTypeArg::Expense
+        ));
+        assert!(matches!(
+            TxTypeArg::from_str("i").unwrap(),
+            TxTypeArg::Income
+        ));
+        assert!(matches!(
+            TxTypeArg::from_str("t").unwrap(),
+            TxTypeArg::Transfer
+        ));
+        assert!(matches!(
+            TxTypeArg::from_str("d").unwrap(),
+            TxTypeArg::DebtChange
+        ));
+        assert!(matches!(
+            TxTypeArg::from_str("c").unwrap(),
+            TxTypeArg::CreditChange
+        ));
 
         // 错误情况
         assert!(TxTypeArg::from_str("unknown").is_err());

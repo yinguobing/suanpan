@@ -128,9 +128,9 @@ mod tests {
             dec!(100.50),
             "CNY",
             TxType::Expense,
-            "acc_alipay",      // account_from_id
+            "acc_alipay",            // account_from_id
             Some("acc_supermarket"), // account_to_id
-            "cat_shopping",    // category_id
+            "cat_shopping",          // category_id
             Some("日用品"),
         );
 

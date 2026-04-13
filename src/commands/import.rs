@@ -62,16 +62,21 @@ struct ParsedTransaction {
 
 pub async fn execute(db: &Database, args: ImportArgs) -> Result<()> {
     let path = Path::new(&args.file);
-    
+
     if !path.exists() {
-        return Err(crate::error::FinanceError::Parse(
-            format!("文件不存在: {}", args.file)
-        ));
+        return Err(crate::error::FinanceError::Parse(format!(
+            "文件不存在: {}",
+            args.file
+        )));
     }
 
     // 根据文件扩展名和来源类型选择解析器
-    let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
-    
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
     let transactions = match ext.as_str() {
         "xls" | "xlsx" => parse_excel(path, &args).await?,
         "csv" => parse_csv(path, &args).await?,
@@ -94,7 +99,7 @@ pub async fn execute(db: &Database, args: ImportArgs) -> Result<()> {
 
     // 显示预览
     println!("\n[信息] 识别到 {} 条交易记录\n", transactions.len());
-    
+
     if args.dry_run {
         // 预览模式：显示前 10 条
         println!("【预览模式 - 前 10 条】");
@@ -162,7 +167,10 @@ pub async fn execute(db: &Database, args: ImportArgs) -> Result<()> {
         }
     }
 
-    println!("[OK] 导入完成: {} 条成功, {} 条跳过（重复）", imported, skipped);
+    println!(
+        "[OK] 导入完成: {} 条成功, {} 条跳过（重复）",
+        imported, skipped
+    );
 
     Ok(())
 }
@@ -191,7 +199,7 @@ async fn import_single_transaction(db: &Database, tx: ParsedTransaction) -> Resu
     .with_source(TxSource::CsvImport);
 
     db.create_transaction(transaction).await?;
-    
+
     Ok(())
 }
 
@@ -204,7 +212,9 @@ async fn parse_excel(path: &Path, args: &ImportArgs) -> Result<Vec<ParsedTransac
         let sheet_names = workbook.sheet_names().to_vec();
         for sheet_name in &sheet_names {
             if let Some(ref target) = args.sheet {
-                if sheet_name != target { continue; }
+                if sheet_name != target {
+                    continue;
+                }
             }
             if let Ok(range) = workbook.worksheet_range(sheet_name) {
                 println!("[文件] 正在解析 sheet: {}", sheet_name);
@@ -219,7 +229,9 @@ async fn parse_excel(path: &Path, args: &ImportArgs) -> Result<Vec<ParsedTransac
         let sheet_names = workbook.sheet_names().to_vec();
         for sheet_name in &sheet_names {
             if let Some(ref target) = args.sheet {
-                if sheet_name != target { continue; }
+                if sheet_name != target {
+                    continue;
+                }
             }
             if let Ok(range) = workbook.worksheet_range(sheet_name) {
                 println!("[文件] 正在解析 sheet: {}", sheet_name);
@@ -231,7 +243,9 @@ async fn parse_excel(path: &Path, args: &ImportArgs) -> Result<Vec<ParsedTransac
             }
         }
     } else {
-        return Err(crate::error::FinanceError::Parse("无法打开 Excel 文件".to_string()));
+        return Err(crate::error::FinanceError::Parse(
+            "无法打开 Excel 文件".to_string(),
+        ));
     }
 
     Ok(result)
@@ -280,7 +294,7 @@ async fn parse_csv(path: &Path, args: &ImportArgs) -> Result<Vec<ParsedTransacti
 /// 解析随手记格式
 fn parse_suishouji_sheet(rows: &[Vec<Data>]) -> Result<Vec<ParsedTransaction>> {
     let mut result = Vec::new();
-    
+
     // 随手记字段：交易类型, 分类, 子分类, 账户1, 账户2, 金额, 日期, 成员, 项目, 商家, 备注
     let mut header_idx: HashMap<String, usize> = HashMap::new();
     let mut header_row = 0;
@@ -329,7 +343,11 @@ fn parse_suishouji_sheet(rows: &[Vec<Data>]) -> Result<Vec<ParsedTransaction>> {
                 row.get(idx).and_then(|cell| match cell {
                     Data::String(s) => {
                         let s = s.trim();
-                        if s.is_empty() || s == "NaN" { None } else { Some(s.to_string()) }
+                        if s.is_empty() || s == "NaN" {
+                            None
+                        } else {
+                            Some(s.to_string())
+                        }
                     }
                     Data::Float(f) => Some(f.to_string()),
                     Data::Int(i) => Some(i.to_string()),
@@ -368,7 +386,9 @@ fn parse_suishouji_sheet(rows: &[Vec<Data>]) -> Result<Vec<ParsedTransaction>> {
             .replace("￥", "")
             .replace(",", "")
             .parse()
-            .map_err(|_| crate::error::FinanceError::Parse(format!("无法解析金额: {}", amount_str)))?;
+            .map_err(|_| {
+                crate::error::FinanceError::Parse(format!("无法解析金额: {}", amount_str))
+            })?;
 
         // 账户1（来源账户）
         let account_from = get_str("account1").unwrap_or_else(|| "现金".to_string());
@@ -385,10 +405,20 @@ fn parse_suishouji_sheet(rows: &[Vec<Data>]) -> Result<Vec<ParsedTransaction>> {
 
         // 备注（合并备注、项目、商家）
         let mut parts = Vec::new();
-        if let Some(note) = get_str("note") { parts.push(note); }
-        if let Some(project) = get_str("project") { parts.push(project); }
-        if let Some(merchant) = get_str("merchant") { parts.push(merchant); }
-        let description = if parts.is_empty() { None } else { Some(parts.join(" / ")) };
+        if let Some(note) = get_str("note") {
+            parts.push(note);
+        }
+        if let Some(project) = get_str("project") {
+            parts.push(project);
+        }
+        if let Some(merchant) = get_str("merchant") {
+            parts.push(merchant);
+        }
+        let description = if parts.is_empty() {
+            None
+        } else {
+            Some(parts.join(" / "))
+        };
 
         result.push(ParsedTransaction {
             timestamp,
@@ -458,9 +488,12 @@ fn parse_generic_sheet(rows: &[Vec<Data>]) -> Result<Vec<ParsedTransaction>> {
             // 检测类型
             if type_col.is_none() {
                 let lower = s.to_lowercase();
-                if lower.contains("支出") || lower.contains("收入") || 
-                   lower.contains("expense") || lower.contains("income") ||
-                   lower.contains("transfer") {
+                if lower.contains("支出")
+                    || lower.contains("收入")
+                    || lower.contains("expense")
+                    || lower.contains("income")
+                    || lower.contains("transfer")
+                {
                     type_col = Some(i);
                 }
             }
@@ -475,12 +508,15 @@ fn parse_generic_sheet(rows: &[Vec<Data>]) -> Result<Vec<ParsedTransaction>> {
         if let (Some(t_idx), Some(a_idx)) = (time_col, amount_col) {
             if let (Some(time_str), Some(amount_str)) = (
                 row.get(t_idx).and_then(|c| c.as_string()),
-                row.get(a_idx).and_then(|c| c.as_string())
+                row.get(a_idx).and_then(|c| c.as_string()),
             ) {
                 if let Ok(timestamp) = parse_datetime(&time_str) {
                     if let Ok((amount, tx_type)) = parse_amount_and_type(
                         &amount_str,
-                        type_col.and_then(|i| row.get(i)).and_then(|c| c.as_string()).as_deref()
+                        type_col
+                            .and_then(|i| row.get(i))
+                            .and_then(|c| c.as_string())
+                            .as_deref(),
                     ) {
                         result.push(ParsedTransaction {
                             timestamp,
@@ -489,9 +525,9 @@ fn parse_generic_sheet(rows: &[Vec<Data>]) -> Result<Vec<ParsedTransaction>> {
                             account_from: "未知账户".to_string(),
                             account_to: None,
                             category: "其他".to_string(),
-                            description: desc_col.and_then(|i| row.get(i)).and_then(|c| {
-                                c.as_string().map(|s| s.to_string())
-                            }),
+                            description: desc_col
+                                .and_then(|i| row.get(i))
+                                .and_then(|c| c.as_string().map(|s| s.to_string())),
                             currency: "CNY".to_string(),
                         });
                     }
@@ -526,7 +562,7 @@ fn parse_datetime(s: &str) -> Result<chrono::DateTime<chrono::Utc>> {
 
     // 作为本地时间（东八区北京时间）解析
     let beijing = chrono::FixedOffset::east_opt(8 * 3600).unwrap();
-    
+
     for fmt in &formats {
         if let Ok(dt) = chrono::NaiveDateTime::parse_from_str(s, fmt) {
             let local_dt = beijing.from_local_datetime(&dt).single().unwrap();
@@ -554,7 +590,10 @@ fn parse_datetime(s: &str) -> Result<chrono::DateTime<chrono::Utc>> {
         }
     }
 
-    Err(crate::error::FinanceError::Parse(format!("无法解析时间: {}", s)))
+    Err(crate::error::FinanceError::Parse(format!(
+        "无法解析时间: {}",
+        s
+    )))
 }
 
 /// 解析金额和类型
@@ -601,10 +640,10 @@ mod tests {
         assert!(parse_datetime("2025-04-09 12:30:00").is_ok());
         assert!(parse_datetime("2025-04-09").is_ok());
         assert!(parse_datetime("2025/04/09 12:30").is_ok());
-        
+
         // 中文格式
         assert!(parse_datetime("2025年04月09日").is_ok());
-        
+
         // 无效格式
         assert!(parse_datetime("invalid").is_err());
     }
@@ -653,11 +692,14 @@ mod tests {
 
         let result = parse_suishouji_sheet(&refund_expense_rows).unwrap();
         assert_eq!(result.len(), 1);
-        
+
         // 验证：支出退款应保持支出类型，金额为负数
         let tx = &result[0];
         assert_eq!(tx.amount, dec!(-100.00), "支出退款应保持负金额");
-        assert!(matches!(tx.tx_type, TxType::Expense), "支出退款应保持支出类型");
+        assert!(
+            matches!(tx.tx_type, TxType::Expense),
+            "支出退款应保持支出类型"
+        );
 
         // 模拟收入退款（负数金额）
         let refund_income_rows = vec![
@@ -679,11 +721,14 @@ mod tests {
 
         let result = parse_suishouji_sheet(&refund_income_rows).unwrap();
         assert_eq!(result.len(), 1);
-        
+
         // 验证：收入退款应保持收入类型，金额为负数
         let tx = &result[0];
         assert_eq!(tx.amount, dec!(-500.00), "收入退款应保持负金额");
-        assert!(matches!(tx.tx_type, TxType::Income), "收入退款应保持收入类型");
+        assert!(
+            matches!(tx.tx_type, TxType::Income),
+            "收入退款应保持收入类型"
+        );
 
         // 测试正常正数金额不受影响
         let normal_rows = vec![
@@ -707,7 +752,10 @@ mod tests {
         assert_eq!(result.len(), 1);
         let tx = &result[0];
         assert_eq!(tx.amount, dec!(50.00), "正常支出应保持正金额");
-        assert!(matches!(tx.tx_type, TxType::Expense), "正常支出应保持支出类型");
+        assert!(
+            matches!(tx.tx_type, TxType::Expense),
+            "正常支出应保持支出类型"
+        );
     }
 
     #[test]
