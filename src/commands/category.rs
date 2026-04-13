@@ -68,7 +68,7 @@ pub async fn execute(db: &Database, command: CategoryCommands) -> Result<()> {
     }
 }
 
-async fn list_categories(db: &Database, args: ListArgs) -> Result<()> {
+async fn list_categories(db: &Database, _args: ListArgs) -> Result<()> {
     let categories = db.list_categories().await?;
 
     if categories.is_empty() {
@@ -88,17 +88,10 @@ async fn list_categories(db: &Database, args: ListArgs) -> Result<()> {
         let parent = cat.parent_id.as_deref().unwrap_or("-");
         let level = cat.level.to_string();
 
-        if args.show_ids {
-            println!(
-                "{:<20} {:<8} {:<20} {}",
-                cat.id, level, parent, cat.full_path
-            );
-        } else {
-            println!(
-                "{:<20} {:<8} {:<20} {}",
-                cat.id, level, parent, cat.full_path
-            );
-        }
+        println!(
+            "{:<20} {:<8} {:<20} {}",
+            cat.id, level, parent, cat.full_path
+        );
     }
     println!();
 

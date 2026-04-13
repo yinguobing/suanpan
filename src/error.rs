@@ -2,7 +2,7 @@ use std::fmt;
 
 #[derive(Debug)]
 pub enum FinanceError {
-    Database(surrealdb::Error),
+    Database(Box<surrealdb::Error>),
     Parse(String),
     Validation(String),
     Io(std::io::Error),
@@ -33,7 +33,7 @@ impl std::error::Error for FinanceError {
 
 impl From<surrealdb::Error> for FinanceError {
     fn from(e: surrealdb::Error) -> Self {
-        FinanceError::Database(e)
+        FinanceError::Database(Box::new(e))
     }
 }
 

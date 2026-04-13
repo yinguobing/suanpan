@@ -132,7 +132,7 @@ impl Database {
             .create("transaction")
             .content(tx)
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
         created.ok_or_else(|| FinanceError::Unknown("创建交易失败".to_string()))
     }
@@ -145,9 +145,11 @@ impl Database {
             .query(sql)
             .bind(("limit", limit as i64))
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
-        let transactions: Vec<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+        let transactions: Vec<Transaction> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(transactions)
     }
 
@@ -164,9 +166,11 @@ impl Database {
             .bind(("from", Datetime::from(from)))
             .bind(("to", Datetime::from(to)))
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
-        let transactions: Vec<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+        let transactions: Vec<Transaction> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(transactions)
     }
 
@@ -178,9 +182,11 @@ impl Database {
             .query(sql)
             .bind(("category", category.to_string()))
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
-        let transactions: Vec<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+        let transactions: Vec<Transaction> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(transactions)
     }
 
@@ -192,9 +198,11 @@ impl Database {
             .query(sql)
             .bind(("tx_type", tx_type.to_string()))
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
-        let transactions: Vec<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+        let transactions: Vec<Transaction> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(transactions)
     }
 
@@ -337,8 +345,12 @@ impl Database {
             query = query.bind(("max_amount", max_amount.unwrap()));
         }
 
-        let mut result = query.await.map_err(FinanceError::Database)?;
-        let mut transactions: Vec<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+        let mut result = query
+            .await
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let mut transactions: Vec<Transaction> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
         // 模糊搜索（在内存中过滤，因为 SurrealDB 的字符串包含查询语法较复杂）
         if let Some(search_str) = search {
@@ -379,9 +391,11 @@ impl Database {
             .bind(("from", Datetime::from(start_dt)))
             .bind(("to", Datetime::from(end_dt)))
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
-        let transactions: Vec<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+        let transactions: Vec<Transaction> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
         let mut total_income = Decimal::ZERO;
         let mut total_expense = Decimal::ZERO;
@@ -436,9 +450,11 @@ impl Database {
             .bind(("from", Datetime::from(from)))
             .bind(("to", Datetime::from(to)))
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
-        let transactions: Vec<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+        let transactions: Vec<Transaction> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
         let mut total_income = Decimal::ZERO;
         let mut total_expense = Decimal::ZERO;
@@ -520,8 +536,12 @@ impl Database {
             query = query.bind(("account_id", acc.to_string()));
         }
 
-        let mut result = query.await.map_err(FinanceError::Database)?;
-        let transactions: Vec<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+        let mut result = query
+            .await
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let transactions: Vec<Transaction> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
         // 获取所有账户信息
         let accounts = self.list_accounts().await?;
@@ -640,8 +660,12 @@ impl Database {
             query = query.bind(("to", Datetime::from(t)));
         }
 
-        let mut result = query.await.map_err(FinanceError::Database)?;
-        let transactions: Vec<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+        let mut result = query
+            .await
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let transactions: Vec<Transaction> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
         // 3. 按分类ID汇总支出金额（只统计 Expense 类型）
         let mut direct_amounts: HashMap<String, Decimal> = HashMap::new();
@@ -779,9 +803,11 @@ impl Database {
             .bind(("from", Datetime::from(from)))
             .bind(("to", Datetime::from(to)))
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
-        let transactions: Vec<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+        let transactions: Vec<Transaction> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
         // 按周期聚合
         let mut period_data: HashMap<String, (Decimal, Decimal, usize)> = HashMap::new();
@@ -855,9 +881,11 @@ impl Database {
             .bind(("from", Datetime::from(from)))
             .bind(("to", Datetime::from(to)))
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
-        let transactions: Vec<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+        let transactions: Vec<Transaction> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
         // 按分类和周期聚合
         // category_id -> (period_label -> amount)
@@ -911,7 +939,7 @@ impl Database {
         self.db
             .delete::<Option<Transaction>>(id)
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(())
     }
 
@@ -929,9 +957,11 @@ impl Database {
             .query(sql)
             .bind(("prefix", format!("transaction:{}", short_id)))
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
-        let transactions: Vec<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+        let transactions: Vec<Transaction> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
         if transactions.is_empty() {
             Ok(None)
@@ -1021,9 +1051,11 @@ impl Database {
             .query(&sql)
             .bind(("data", update_data))
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
-        let updated: Option<Transaction> = result.take(0).map_err(FinanceError::Database)?;
+        let updated: Option<Transaction> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(updated)
     }
 
@@ -1040,7 +1072,7 @@ impl Database {
             .bind(("account_type", account.account_type))
             .bind(("parent_id", account.parent_id))
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         // 重新查询获取创建的记录
         self.get_account(&id)
             .await?
@@ -1055,8 +1087,10 @@ impl Database {
             .query(sql)
             .bind(("id", id.to_string()))
             .await
-            .map_err(FinanceError::Database)?;
-        let account: Option<Account> = result.take(0).map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let account: Option<Account> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(account)
     }
 
@@ -1068,8 +1102,10 @@ impl Database {
             .query(sql)
             .bind(("name", name.to_string()))
             .await
-            .map_err(FinanceError::Database)?;
-        let account: Option<Account> = result.take(0).map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let account: Option<Account> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(account)
     }
 
@@ -1091,8 +1127,14 @@ impl Database {
     /// 列出所有账户
     pub async fn list_accounts(&self) -> Result<Vec<Account>> {
         let sql = "SELECT string::split(<string> id, ':')[1] as id, name, account_type, parent_id, created_at FROM account ORDER BY name";
-        let mut result = self.db.query(sql).await.map_err(FinanceError::Database)?;
-        let accounts: Vec<Account> = result.take(0).map_err(FinanceError::Database)?;
+        let mut result = self
+            .db
+            .query(sql)
+            .await
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let accounts: Vec<Account> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(accounts)
     }
 
@@ -1104,8 +1146,10 @@ impl Database {
             .query(sql)
             .bind(("parent_id", parent_id.to_string()))
             .await
-            .map_err(FinanceError::Database)?;
-        let accounts: Vec<Account> = result.take(0).map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let accounts: Vec<Account> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(accounts)
     }
 
@@ -1118,8 +1162,10 @@ impl Database {
             .bind(("name", name.to_string()))
             .bind(("id", id.to_string()))
             .await
-            .map_err(FinanceError::Database)?;
-        let updated: Option<Account> = result.take(0).map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let updated: Option<Account> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(updated)
     }
 
@@ -1131,8 +1177,10 @@ impl Database {
             .query(sql)
             .bind(("id", id.to_string()))
             .await
-            .map_err(FinanceError::Database)?;
-        let deleted: Option<Account> = result.take(0).map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let deleted: Option<Account> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(deleted.is_some())
     }
 
@@ -1150,7 +1198,7 @@ impl Database {
             .bind(("full_path", category.full_path))
             .bind(("level", category.level as i64))
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         // 重新查询获取创建的记录
         self.get_category(&id)
             .await?
@@ -1165,8 +1213,10 @@ impl Database {
             .query(sql)
             .bind(("id", id.to_string()))
             .await
-            .map_err(FinanceError::Database)?;
-        let category: Option<CategoryRecord> = result.take(0).map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let category: Option<CategoryRecord> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(category)
     }
 
@@ -1178,8 +1228,10 @@ impl Database {
             .query(sql)
             .bind(("path", full_path.to_string()))
             .await
-            .map_err(FinanceError::Database)?;
-        let category: Option<CategoryRecord> = result.take(0).map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let category: Option<CategoryRecord> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(category)
     }
 
@@ -1236,8 +1288,14 @@ impl Database {
     /// 列出所有分类
     pub async fn list_categories(&self) -> Result<Vec<CategoryRecord>> {
         let sql = "SELECT string::split(<string> id, ':')[1] as id, name, parent_id, full_path, level, created_at FROM category ORDER BY full_path";
-        let mut result = self.db.query(sql).await.map_err(FinanceError::Database)?;
-        let categories: Vec<CategoryRecord> = result.take(0).map_err(FinanceError::Database)?;
+        let mut result = self
+            .db
+            .query(sql)
+            .await
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let categories: Vec<CategoryRecord> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(categories)
     }
 
@@ -1249,8 +1307,10 @@ impl Database {
             .query(sql)
             .bind(("parent_id", parent_id.to_string()))
             .await
-            .map_err(FinanceError::Database)?;
-        let categories: Vec<CategoryRecord> = result.take(0).map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let categories: Vec<CategoryRecord> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(categories)
     }
 
@@ -1280,8 +1340,10 @@ impl Database {
             .bind(("path", new_full_path.clone()))
             .bind(("id", id.to_string()))
             .await
-            .map_err(FinanceError::Database)?;
-        let updated: Option<CategoryRecord> = result.take(0).map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let updated: Option<CategoryRecord> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
         // 级联更新所有子分类的full_path
         self.update_child_category_paths(&old_category.full_path, &new_full_path)
@@ -1303,7 +1365,7 @@ impl Database {
             .bind(("new_prefix", new_prefix.to_string()))
             .bind(("old_prefix_with_slash", format!("{}/", old_prefix)))
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(())
     }
 
@@ -1315,14 +1377,16 @@ impl Database {
             .query(sql)
             .bind(("category_id", category_id.to_string()))
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
         #[derive(Debug, Deserialize)]
         struct CountResult {
             count: usize,
         }
 
-        let counts: Vec<CountResult> = result.take(0).map_err(FinanceError::Database)?;
+        let counts: Vec<CountResult> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(counts.first().map(|c| c.count).unwrap_or(0))
     }
 
@@ -1334,14 +1398,16 @@ impl Database {
             .query(sql)
             .bind(("account_id", account_id.to_string()))
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
         #[derive(Debug, Deserialize)]
         struct CountResult {
             count: usize,
         }
 
-        let counts: Vec<CountResult> = result.take(0).map_err(FinanceError::Database)?;
+        let counts: Vec<CountResult> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(counts.first().map(|c| c.count).unwrap_or(0))
     }
 
@@ -1353,14 +1419,16 @@ impl Database {
             .query(sql)
             .bind(("tag_id", tag_id.to_string()))
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
         #[derive(Debug, Deserialize)]
         struct CountResult {
             count: usize,
         }
 
-        let counts: Vec<CountResult> = result.take(0).map_err(FinanceError::Database)?;
+        let counts: Vec<CountResult> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(counts.first().map(|c| c.count).unwrap_or(0))
     }
 
@@ -1372,9 +1440,11 @@ impl Database {
             .query(sql)
             .bind(("tag_id", tag_id.to_string()))
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         // SurrealDB UPDATE 返回受影响的记录数
-        let affected: Vec<serde_json::Value> = result.take(0).map_err(FinanceError::Database)?;
+        let affected: Vec<serde_json::Value> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(affected.len())
     }
 
@@ -1400,7 +1470,7 @@ impl Database {
                 .query(sql)
                 .bind(("id", cat_id.to_string()))
                 .await
-                .map_err(FinanceError::Database)?;
+                .map_err(|e| FinanceError::Database(Box::new(e)))?;
         }
 
         Ok(true)
@@ -1418,7 +1488,7 @@ impl Database {
             .bind(("name", tag.name))
             .bind(("color", tag.color))
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         // 重新查询获取创建的记录
         self.get_tag(&id)
             .await?
@@ -1433,8 +1503,10 @@ impl Database {
             .query(sql)
             .bind(("id", id.to_string()))
             .await
-            .map_err(FinanceError::Database)?;
-        let tag: Option<Tag> = result.take(0).map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let tag: Option<Tag> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(tag)
     }
 
@@ -1446,8 +1518,10 @@ impl Database {
             .query(sql)
             .bind(("name", name.to_string()))
             .await
-            .map_err(FinanceError::Database)?;
-        let tag: Option<Tag> = result.take(0).map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let tag: Option<Tag> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(tag)
     }
 
@@ -1467,17 +1541,25 @@ impl Database {
             .bind(("id", id.clone()))
             .bind(("name", name.to_string()))
             .await
-            .map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
-        let tag: Option<Tag> = result.take(0).map_err(FinanceError::Database)?;
+        let tag: Option<Tag> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         tag.ok_or_else(|| FinanceError::Unknown("创建标签失败".to_string()))
     }
 
     /// 列出所有标签
     pub async fn list_tags(&self) -> Result<Vec<Tag>> {
         let sql = "SELECT string::split(<string> id, ':')[1] as id, name, color, created_at FROM tag ORDER BY name";
-        let mut result = self.db.query(sql).await.map_err(FinanceError::Database)?;
-        let tags: Vec<Tag> = result.take(0).map_err(FinanceError::Database)?;
+        let mut result = self
+            .db
+            .query(sql)
+            .await
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let tags: Vec<Tag> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(tags)
     }
 
@@ -1490,8 +1572,10 @@ impl Database {
             .bind(("name", name.to_string()))
             .bind(("id", id.to_string()))
             .await
-            .map_err(FinanceError::Database)?;
-        let updated: Option<Tag> = result.take(0).map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let updated: Option<Tag> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(updated)
     }
 
@@ -1506,8 +1590,10 @@ impl Database {
             .query(sql)
             .bind(("id", id.to_string()))
             .await
-            .map_err(FinanceError::Database)?;
-        let deleted: Option<Tag> = result.take(0).map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let deleted: Option<Tag> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(deleted.is_some())
     }
 
@@ -1524,8 +1610,10 @@ impl Database {
             .query(sql)
             .bind(("ids", ids.to_vec()))
             .await
-            .map_err(FinanceError::Database)?;
-        let accounts: Vec<Account> = result.take(0).map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let accounts: Vec<Account> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(accounts)
     }
 
@@ -1540,8 +1628,10 @@ impl Database {
             .query(sql)
             .bind(("ids", ids.to_vec()))
             .await
-            .map_err(FinanceError::Database)?;
-        let categories: Vec<CategoryRecord> = result.take(0).map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let categories: Vec<CategoryRecord> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(categories)
     }
 
@@ -1556,8 +1646,10 @@ impl Database {
             .query(sql)
             .bind(("ids", ids.to_vec()))
             .await
-            .map_err(FinanceError::Database)?;
-        let tags: Vec<Tag> = result.take(0).map_err(FinanceError::Database)?;
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let tags: Vec<Tag> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(tags)
     }
 
@@ -1688,7 +1780,7 @@ impl Database {
                     .bind(("tag_ids", tag_ids))
                     .bind(("id", old_tx.id))
                     .await
-                    .map_err(FinanceError::Database)?;
+                    .map_err(|e| FinanceError::Database(Box::new(e)))?;
 
                 stats.transactions_migrated += 1;
             }
@@ -1708,8 +1800,14 @@ impl Database {
             WHERE account_from IS NOT NULL AND account_from_id IS NONE
         "#;
 
-        let mut result = self.db.query(sql).await.map_err(FinanceError::Database)?;
-        let transactions: Vec<OldTransaction> = result.take(0).map_err(FinanceError::Database)?;
+        let mut result = self
+            .db
+            .query(sql)
+            .await
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
+        let transactions: Vec<OldTransaction> = result
+            .take(0)
+            .map_err(|e| FinanceError::Database(Box::new(e)))?;
         Ok(transactions)
     }
 }

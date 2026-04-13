@@ -218,15 +218,7 @@ fn print_monthly_stats(stats: &MonthlyStats, by_category: bool, show_ids: bool) 
     table.add_row(vec!["总支出", &format!("¥{}", stats.total_expense)]);
 
     let net_color = if stats.net >= Decimal::ZERO { "+" } else { "" };
-    table.add_row(vec![
-        "净收支",
-        &format!(
-            "{}{}¥{}",
-            net_color,
-            if stats.net >= Decimal::ZERO { "" } else { "" },
-            stats.net
-        ),
-    ]);
+    table.add_row(vec!["净收支", &format!("{}¥{}", net_color, stats.net)]);
     table.add_row(vec!["交易笔数", &stats.transaction_count.to_string()]);
     println!("{}", table);
 
@@ -258,15 +250,7 @@ fn print_period_stats(stats: &PeriodStats, by_category: bool, show_ids: bool) {
     table.add_row(vec!["总支出", &format!("¥{}", stats.total_expense)]);
 
     let net_color = if stats.net >= Decimal::ZERO { "+" } else { "" };
-    table.add_row(vec![
-        "净收支",
-        &format!(
-            "{}{}¥{}",
-            net_color,
-            if stats.net >= Decimal::ZERO { "" } else { "" },
-            stats.net
-        ),
-    ]);
+    table.add_row(vec!["净收支", &format!("{}¥{}", net_color, stats.net)]);
     table.add_row(vec!["交易笔数", &stats.transaction_count.to_string()]);
     println!("{}", table);
 
@@ -362,11 +346,7 @@ fn print_hierarchical_category_stats(
             };
 
             // 占比显示（正数为支出，负数为退款）
-            let percentage_str = if stat.percentage < Decimal::ZERO {
-                format!("{}%", stat.percentage)
-            } else {
-                format!("{}%", stat.percentage)
-            };
+            let percentage_str = format!("{}%", stat.percentage);
 
             table.add_row(vec![display_name, direct_str, total_str, percentage_str]);
 
