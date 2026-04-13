@@ -24,12 +24,12 @@ jobs:
           - target: x86_64-unknown-linux-musl
             os: ubuntu-latest
             archive: tar.gz
-          # macOS x86_64
-          - target: x86_64-apple-darwin
-            os: macos-13
-            archive: tar.gz
-          # macOS ARM64
+          # macOS ARM64 (native build)
           - target: aarch64-apple-darwin
+            os: macos-latest
+            archive: tar.gz
+          # macOS x86_64 (cross-compile from ARM64)
+          - target: x86_64-apple-darwin
             os: macos-latest
             archive: tar.gz
           # Windows x86_64
