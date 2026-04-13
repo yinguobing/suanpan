@@ -42,9 +42,9 @@ pub struct StatsArgs {
 pub async fn execute(db: &Database, args: StatsArgs) -> Result<()> {
     // 处理账户统计
     if args.by_account || args.account.is_some() {
-        let (from_dt, to_dt) = if args.from.is_some() {
+        let (from_dt, to_dt) = if let Some(from) = &args.from {
             // 自定义日期范围
-            let from_date = parse_date(args.from.as_ref().unwrap())?;
+            let from_date = parse_date(from)?;
             let to_date = match &args.to {
                 Some(to_str) => parse_date(to_str)?,
                 None => Local::now().date_naive(),
@@ -59,9 +59,9 @@ pub async fn execute(db: &Database, args: StatsArgs) -> Result<()> {
             let from_dt = from_date.and_hms_opt(0, 0, 0).unwrap().and_utc();
             let to_dt = to_date.and_hms_opt(23, 59, 59).unwrap().and_utc();
             (Some(from_dt), Some(to_dt))
-        } else if args.month.is_some() {
+        } else if let Some(month_str) = &args.month {
             // 指定月份
-            let (year, month) = parse_month(args.month.as_ref().unwrap())?;
+            let (year, month) = parse_month(month_str)?;
             let start = NaiveDate::from_ymd_opt(year, month, 1)
                 .ok_or_else(|| crate::error::FinanceError::Validation("无效的日期".to_string()))?;
             let end = if month == 12 {
@@ -116,9 +116,9 @@ pub async fn execute(db: &Database, args: StatsArgs) -> Result<()> {
 
     // 处理按分类层级统计
     if args.by_category {
-        let (from_dt, to_dt, title) = if args.from.is_some() {
+        let (from_dt, to_dt, title) = if let Some(from) = &args.from {
             // 自定义日期范围
-            let from_date = parse_date(args.from.as_ref().unwrap())?;
+            let from_date = parse_date(from)?;
             let to_date = match &args.to {
                 Some(to_str) => parse_date(to_str)?,
                 None => Local::now().date_naive(),
@@ -139,9 +139,9 @@ pub async fn execute(db: &Database, args: StatsArgs) -> Result<()> {
                 format!("{} 至 {} 分类统计", from_date, to_date)
             };
             (Some(from_dt), Some(to_dt), title)
-        } else if args.month.is_some() {
+        } else if let Some(month_str) = &args.month {
             // 指定月份
-            let (year, month) = parse_month(args.month.as_ref().unwrap())?;
+            let (year, month) = parse_month(month_str)?;
             let start = NaiveDate::from_ymd_opt(year, month, 1)
                 .ok_or_else(|| crate::error::FinanceError::Validation("无效的日期".to_string()))?;
             let end = if month == 12 {
