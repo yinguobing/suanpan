@@ -8,7 +8,7 @@ repository = "https://github.com/yinguobing/suanpan"
 license = "GPL-3.0"
 keywords = ["cli", "finance", "accounting", "personal-finance", "bookkeeping"]
 categories = ["command-line-utilities", "finance"]
-rust-version = "1.70"
+rust-version = "1.82"
 
 [dependencies]
 clap = { version = "4.5", features = ["derive"] }

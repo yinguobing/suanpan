@@ -32,7 +32,7 @@ cargo build --release
 sudo cp target/release/suanpan /usr/local/bin/
 ```
 
-**依赖**: Rust 1.70+
+**依赖**: Rust 1.82+
 
 ## 快速开始
 
