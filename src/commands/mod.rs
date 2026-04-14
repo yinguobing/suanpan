@@ -36,6 +36,10 @@ use update::UpdateArgs;
 pub struct Cli {
     #[command(subcommand)]
     pub command: Commands,
+
+    /// 使用人类友好的表格格式输出
+    #[arg(long, global = true)]
+    pub human_readable: bool,
 }
 
 #[derive(Subcommand)]

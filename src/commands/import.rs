@@ -9,6 +9,7 @@ use crate::db::surreal::Database;
 use crate::error::Result;
 use crate::models::transaction::Transaction;
 use crate::models::types::{TxSource, TxType};
+use crate::output::{print_empty_line, print_success, OutputFormat};
 
 /// 数据来源类型
 #[derive(clap::ValueEnum, Clone, Debug, Default)]
@@ -60,7 +61,7 @@ struct ParsedTransaction {
     currency: String,
 }
 
-pub async fn execute(db: &Database, args: ImportArgs) -> Result<()> {
+pub async fn execute(db: &Database, args: ImportArgs, output_format: OutputFormat) -> Result<()> {
     let path = Path::new(&args.file);
 
     if !path.exists() {
@@ -78,48 +79,82 @@ pub async fn execute(db: &Database, args: ImportArgs) -> Result<()> {
         .to_lowercase();
 
     let transactions = match ext.as_str() {
-        "xls" | "xlsx" => parse_excel(path, &args).await?,
-        "csv" => parse_csv(path, &args).await?,
+        "xls" | "xlsx" => parse_excel(path, &args, output_format).await?,
+        "csv" => parse_csv(path, &args, output_format).await?,
         _ => {
             // 根据来源类型推断格式
             match args.source {
                 ImportSource::Suishouji | ImportSource::Alipay | ImportSource::Wechat => {
                     // 尝试作为 Excel 解析
-                    parse_excel(path, &args).await?
+                    parse_excel(path, &args, output_format).await?
                 }
-                ImportSource::Csv => parse_csv(path, &args).await?,
+                ImportSource::Csv => parse_csv(path, &args, output_format).await?,
             }
         }
     };
 
     if transactions.is_empty() {
-        println!("未识别到任何交易记录");
+        match output_format {
+            OutputFormat::Machine => println!("NO_TRANSACTIONS_FOUND"),
+            OutputFormat::Human => println!("未识别到任何交易记录"),
+        }
         return Ok(());
     }
 
     // 显示预览
-    println!("\n[信息] 识别到 {} 条交易记录\n", transactions.len());
+    match output_format {
+        OutputFormat::Machine => println!("FOUND:{}", transactions.len()),
+        OutputFormat::Human => println!("\n[信息] 识别到 {} 条交易记录\n", transactions.len()),
+    }
 
     if args.dry_run {
         // 预览模式：显示前 10 条
-        println!("【预览模式 - 前 10 条】");
-        for (i, tx) in transactions.iter().take(10).enumerate() {
-            println!(
-                "{:2}. {} | {:?} | ¥{} | {} -> {} | {} | {}",
-                i + 1,
-                tx.timestamp.with_timezone(&Local).format("%Y-%m-%d %H:%M"),
-                tx.tx_type,
-                tx.amount,
-                tx.account_from,
-                tx.account_to.as_deref().unwrap_or("-"),
-                tx.category,
-                tx.description.as_deref().unwrap_or("")
-            );
+        match output_format {
+            OutputFormat::Machine => {
+                println!("DRY_RUN");
+                for (i, tx) in transactions.iter().take(10).enumerate() {
+                    println!(
+                        "{}.{}|{}|{:?}|{}|{}|{}|{}|{}",
+                        i + 1,
+                        tx.timestamp.to_rfc3339(),
+                        tx.tx_type,
+                        tx.amount,
+                        tx.account_from,
+                        tx.account_to.as_deref().unwrap_or("-"),
+                        tx.category,
+                        tx.description.as_deref().unwrap_or(""),
+                        tx.currency
+                    );
+                }
+            }
+            OutputFormat::Human => {
+                println!("【预览模式 - 前 10 条】");
+                for (i, tx) in transactions.iter().take(10).enumerate() {
+                    println!(
+                        "{:2}. {} | {:?} | ¥{} | {} -> {} | {} | {}",
+                        i + 1,
+                        tx.timestamp.with_timezone(&Local).format("%Y-%m-%d %H:%M"),
+                        tx.tx_type,
+                        tx.amount,
+                        tx.account_from,
+                        tx.account_to.as_deref().unwrap_or("-"),
+                        tx.category,
+                        tx.description.as_deref().unwrap_or("")
+                    );
+                }
+            }
         }
         if transactions.len() > 10 {
-            println!("... 还有 {} 条", transactions.len() - 10);
+            match output_format {
+                OutputFormat::Machine => println!("MORE:{}", transactions.len() - 10),
+                OutputFormat::Human => println!("... 还有 {} 条", transactions.len() - 10),
+            }
         }
-        println!("\n取消 --dry-run 参数以实际导入");
+        print_empty_line();
+        match output_format {
+            OutputFormat::Machine => println!("DRY_RUN_COMPLETE"),
+            OutputFormat::Human => println!("取消 --dry-run 参数以实际导入"),
+        }
         return Ok(());
     }
 
@@ -167,10 +202,15 @@ pub async fn execute(db: &Database, args: ImportArgs) -> Result<()> {
         }
     }
 
-    println!(
-        "[OK] 导入完成: {} 条成功, {} 条跳过（重复）",
-        imported, skipped
-    );
+    match output_format {
+        OutputFormat::Machine => println!("IMPORTED:{}:SKIPPED:{}", imported, skipped),
+        OutputFormat::Human => {
+            print_success(
+                &format!("导入完成: {} 条成功, {} 条跳过（重复）", imported, skipped),
+                output_format,
+            );
+        }
+    }
 
     Ok(())
 }
@@ -204,7 +244,11 @@ async fn import_single_transaction(db: &Database, tx: ParsedTransaction) -> Resu
 }
 
 /// 解析 Excel 文件
-async fn parse_excel(path: &Path, args: &ImportArgs) -> Result<Vec<ParsedTransaction>> {
+async fn parse_excel(
+    path: &Path,
+    args: &ImportArgs,
+    output_format: OutputFormat,
+) -> Result<Vec<ParsedTransaction>> {
     let mut result = Vec::new();
 
     // 尝试作为 XLSX 打开
@@ -217,7 +261,10 @@ async fn parse_excel(path: &Path, args: &ImportArgs) -> Result<Vec<ParsedTransac
                 }
             }
             if let Ok(range) = workbook.worksheet_range(sheet_name) {
-                println!("[文件] 正在解析 sheet: {}", sheet_name);
+                match output_format {
+                    OutputFormat::Machine => println!("SHEET:{}", sheet_name),
+                    OutputFormat::Human => println!("[文件] 正在解析 sheet: {}", sheet_name),
+                }
                 let rows: Vec<Vec<Data>> = range.rows().map(|r| r.to_vec()).collect();
                 if !rows.is_empty() {
                     let txs = parse_sheet_rows(&rows, args)?;
@@ -234,7 +281,10 @@ async fn parse_excel(path: &Path, args: &ImportArgs) -> Result<Vec<ParsedTransac
                 }
             }
             if let Ok(range) = workbook.worksheet_range(sheet_name) {
-                println!("[文件] 正在解析 sheet: {}", sheet_name);
+                match output_format {
+                    OutputFormat::Machine => println!("SHEET:{}", sheet_name),
+                    OutputFormat::Human => println!("[文件] 正在解析 sheet: {}", sheet_name),
+                }
                 let rows: Vec<Vec<Data>> = range.rows().map(|r| r.to_vec()).collect();
                 if !rows.is_empty() {
                     let txs = parse_sheet_rows(&rows, args)?;
@@ -262,7 +312,11 @@ fn parse_sheet_rows(rows: &[Vec<Data>], args: &ImportArgs) -> Result<Vec<ParsedT
 }
 
 /// 解析 CSV 文件
-async fn parse_csv(path: &Path, args: &ImportArgs) -> Result<Vec<ParsedTransaction>> {
+async fn parse_csv(
+    path: &Path,
+    args: &ImportArgs,
+    _output_format: OutputFormat,
+) -> Result<Vec<ParsedTransaction>> {
     let content = std::fs::read_to_string(path)
         .map_err(|e| crate::error::FinanceError::Parse(format!("读取 CSV 失败: {}", e)))?;
 

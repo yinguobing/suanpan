@@ -1,11 +1,11 @@
 use chrono::{Datelike, Local, NaiveDate};
 use clap::Args;
-use comfy_table::Table;
 use rust_decimal::Decimal;
 
 use crate::db::surreal::{Database, HierarchicalCategoryStats, PeriodStats};
 use crate::db::MonthlyStats;
 use crate::error::Result;
+use crate::output::{print_empty_line, print_title, OutputFormat, OutputTable};
 
 /// 统计报表
 #[derive(Args)]
@@ -39,7 +39,7 @@ pub struct StatsArgs {
     pub show_ids: bool,
 }
 
-pub async fn execute(db: &Database, args: StatsArgs) -> Result<()> {
+pub async fn execute(db: &Database, args: StatsArgs, output_format: OutputFormat) -> Result<()> {
     // 处理账户统计
     if args.by_account || args.account.is_some() {
         let (from_dt, to_dt) = if let Some(from) = &args.from {
@@ -110,7 +110,12 @@ pub async fn execute(db: &Database, args: StatsArgs) -> Result<()> {
             account_stats
         };
 
-        print_account_stats(&filtered_stats, args.show_ids, args.account.is_some());
+        print_account_stats(
+            &filtered_stats,
+            args.show_ids,
+            args.account.is_some(),
+            output_format,
+        );
         return Ok(());
     }
 
@@ -162,7 +167,7 @@ pub async fn execute(db: &Database, args: StatsArgs) -> Result<()> {
         };
 
         let stats = db.get_hierarchical_category_stats(from_dt, to_dt).await?;
-        print_hierarchical_category_stats(&stats, &title, args.show_ids);
+        print_hierarchical_category_stats(&stats, &title, args.show_ids, output_format);
         return Ok(());
     }
 
@@ -189,7 +194,7 @@ pub async fn execute(db: &Database, args: StatsArgs) -> Result<()> {
 
         let stats = db.get_stats_by_date_range(from_dt, to_dt).await?;
 
-        print_period_stats(&stats, args.by_category, args.show_ids);
+        print_period_stats(&stats, args.by_category, args.show_ids, output_format);
     } else {
         // 月度统计
         let now = Local::now();
@@ -201,62 +206,123 @@ pub async fn execute(db: &Database, args: StatsArgs) -> Result<()> {
 
         let stats = db.get_monthly_stats(year, month).await?;
 
-        print_monthly_stats(&stats, args.by_category, args.show_ids);
+        print_monthly_stats(&stats, args.by_category, args.show_ids, output_format);
     }
 
     Ok(())
 }
 
 /// 打印月度统计结果
-fn print_monthly_stats(stats: &MonthlyStats, by_category: bool, show_ids: bool) {
-    println!("\n[报表] {}年{}月 财务统计\n", stats.year, stats.month);
+fn print_monthly_stats(
+    stats: &MonthlyStats,
+    by_category: bool,
+    show_ids: bool,
+    output_format: OutputFormat,
+) {
+    let title = match output_format {
+        OutputFormat::Machine => format!("STATS:{}-{}", stats.year, stats.month),
+        OutputFormat::Human => format!("{}年{}月 财务统计", stats.year, stats.month),
+    };
+    print_title(&title, output_format);
+    print_empty_line();
 
     // 基本统计
-    let mut table = Table::new();
-    table.set_header(vec!["项目", "金额"]);
-    table.add_row(vec!["总收入", &format!("¥{}", stats.total_income)]);
-    table.add_row(vec!["总支出", &format!("¥{}", stats.total_expense)]);
+    match output_format {
+        OutputFormat::Machine => {
+            println!("总收入: {}", stats.total_income);
+            println!("总支出: {}", stats.total_expense);
+            println!("净收支: {}", stats.net);
+            println!("交易笔数: {}", stats.transaction_count);
+        }
+        OutputFormat::Human => {
+            let mut table = OutputTable::new(output_format);
+            table.set_header(vec!["项目", "金额"]);
+            table.add_row(vec!["总收入", &format!("¥{}", stats.total_income)]);
+            table.add_row(vec!["总支出", &format!("¥{}", stats.total_expense)]);
 
-    let net_color = if stats.net >= Decimal::ZERO { "+" } else { "" };
-    table.add_row(vec!["净收支", &format!("{}¥{}", net_color, stats.net)]);
-    table.add_row(vec!["交易笔数", &stats.transaction_count.to_string()]);
-    println!("{}", table);
+            let net_color = if stats.net >= Decimal::ZERO { "+" } else { "" };
+            table.add_row(vec!["净收支", &format!("{}¥{}", net_color, stats.net)]);
+            table.add_row(vec!["交易笔数", &stats.transaction_count.to_string()]);
+            table.print();
+        }
+    }
 
     // 分类统计
     if by_category {
+        print_empty_line();
         if !stats.category_breakdown.is_empty() {
-            print_category_breakdown(&stats.category_breakdown, stats.total_expense, show_ids);
+            print_category_breakdown(
+                &stats.category_breakdown,
+                stats.total_expense,
+                show_ids,
+                output_format,
+            );
         } else {
-            println!("\n[信息] 暂无分类数据");
+            match output_format {
+                OutputFormat::Machine => println!("NO_CATEGORY_DATA"),
+                OutputFormat::Human => println!("[信息] 暂无分类数据"),
+            }
         }
     }
 }
 
 /// 打印自定义日期范围统计结果
-fn print_period_stats(stats: &PeriodStats, by_category: bool, show_ids: bool) {
+fn print_period_stats(
+    stats: &PeriodStats,
+    by_category: bool,
+    show_ids: bool,
+    output_format: OutputFormat,
+) {
     let from_str = stats.from.format("%Y-%m-%d").to_string();
     let to_str = stats.to.format("%Y-%m-%d").to_string();
 
-    if from_str == to_str {
-        println!("\n[报表] {} 财务统计\n", from_str);
+    let title = if from_str == to_str {
+        match output_format {
+            OutputFormat::Machine => format!("STATS:{}", from_str),
+            OutputFormat::Human => format!("{} 财务统计", from_str),
+        }
     } else {
-        println!("\n[报表] {} 至 {} 财务统计\n", from_str, to_str);
-    }
+        match output_format {
+            OutputFormat::Machine => format!("STATS:{}:{}", from_str, to_str),
+            OutputFormat::Human => format!("{} 至 {} 财务统计", from_str, to_str),
+        }
+    };
+
+    print_title(&title, output_format);
+    print_empty_line();
 
     // 基本统计
-    let mut table = Table::new();
-    table.set_header(vec!["项目", "金额"]);
-    table.add_row(vec!["总收入", &format!("¥{}", stats.total_income)]);
-    table.add_row(vec!["总支出", &format!("¥{}", stats.total_expense)]);
+    match output_format {
+        OutputFormat::Machine => {
+            println!("总收入: {}", stats.total_income);
+            println!("总支出: {}", stats.total_expense);
+            let net = stats.total_income - stats.total_expense;
+            println!("净收支: {}", net);
+            println!("交易笔数: {}", stats.transaction_count);
+        }
+        OutputFormat::Human => {
+            let mut table = OutputTable::new(output_format);
+            table.set_header(vec!["项目", "金额"]);
+            table.add_row(vec!["总收入", &format!("¥{}", stats.total_income)]);
+            table.add_row(vec!["总支出", &format!("¥{}", stats.total_expense)]);
 
-    let net_color = if stats.net >= Decimal::ZERO { "+" } else { "" };
-    table.add_row(vec!["净收支", &format!("{}¥{}", net_color, stats.net)]);
-    table.add_row(vec!["交易笔数", &stats.transaction_count.to_string()]);
-    println!("{}", table);
+            let net = stats.total_income - stats.total_expense;
+            let net_color = if net >= Decimal::ZERO { "+" } else { "" };
+            table.add_row(vec!["净收支", &format!("{}¥{}", net_color, net)]);
+            table.add_row(vec!["交易笔数", &stats.transaction_count.to_string()]);
+            table.print();
+        }
+    }
 
     // 分类统计
     if by_category && !stats.category_breakdown.is_empty() {
-        print_category_breakdown(&stats.category_breakdown, stats.total_expense, show_ids);
+        print_empty_line();
+        print_category_breakdown(
+            &stats.category_breakdown,
+            stats.total_expense,
+            show_ids,
+            output_format,
+        );
     }
 }
 
@@ -265,30 +331,48 @@ fn print_category_breakdown(
     category_breakdown: &std::collections::HashMap<String, (String, Decimal)>,
     total_expense: Decimal,
     show_ids: bool,
+    output_format: OutputFormat,
 ) {
-    println!("\n[图表] 支出分类占比\n");
-    let mut cat_table = Table::new();
-    cat_table.set_header(vec!["分类", "金额", "占比"]);
+    print_title("支出分类占比", output_format);
+    print_empty_line();
 
     let mut categories: Vec<_> = category_breakdown.iter().collect();
     // 按金额降序排序
     categories.sort_by(|a, b| b.1 .1.cmp(&a.1 .1));
 
-    for (category_id, (category_name, amount)) in categories {
-        let percentage = if total_expense > Decimal::ZERO {
-            (*amount / total_expense * Decimal::from(100)).round_dp(1)
-        } else {
-            Decimal::ZERO
-        };
-        // 根据 show_ids 参数决定显示 ID 还是名称
-        let display_name = if show_ids { category_id } else { category_name };
-        cat_table.add_row(vec![
-            display_name,
-            &format!("¥{}", amount),
-            &format!("{}%", percentage),
-        ]);
+    match output_format {
+        OutputFormat::Machine => {
+            println!("分类|金额|占比");
+            for (category_id, (category_name, amount)) in categories {
+                let percentage = if total_expense > Decimal::ZERO {
+                    (*amount / total_expense * Decimal::from(100)).round_dp(1)
+                } else {
+                    Decimal::ZERO
+                };
+                let display_name = if show_ids { category_id } else { category_name };
+                println!("{}|{}|{}%", display_name, amount, percentage);
+            }
+        }
+        OutputFormat::Human => {
+            let mut table = OutputTable::new(output_format);
+            table.set_header(vec!["分类", "金额", "占比"]);
+
+            for (category_id, (category_name, amount)) in categories {
+                let percentage = if total_expense > Decimal::ZERO {
+                    (*amount / total_expense * Decimal::from(100)).round_dp(1)
+                } else {
+                    Decimal::ZERO
+                };
+                let display_name = if show_ids { category_id } else { category_name };
+                table.add_row(vec![
+                    display_name,
+                    &format!("¥{}", amount),
+                    &format!("{}%", percentage),
+                ]);
+            }
+            table.print();
+        }
     }
-    println!("{}", cat_table);
 }
 
 /// 打印层级分类统计
@@ -296,73 +380,133 @@ fn print_hierarchical_category_stats(
     stats: &[HierarchicalCategoryStats],
     title: &str,
     show_ids: bool,
+    output_format: OutputFormat,
 ) {
-    println!("\n[报表] {}\n", title);
+    print_title(title, output_format);
+    print_empty_line();
 
     // 检查是否有有效数据（非零金额）
     let has_data = stats.iter().any(|s| s.total_amount != Decimal::ZERO);
     if !has_data {
-        println!("暂无支出数据");
+        match output_format {
+            OutputFormat::Machine => println!("NO_DATA"),
+            OutputFormat::Human => println!("暂无支出数据"),
+        }
         return;
     }
 
-    let mut table = Table::new();
-    table.set_header(vec!["分类", "直接金额", "汇总金额", "占比"]);
+    match output_format {
+        OutputFormat::Machine => {
+            println!("分类|直接金额|汇总金额|占比");
+            print_hierarchical_machine(stats, show_ids, "");
 
-    // 递归添加行
-    fn add_rows(
-        table: &mut Table,
-        stats: &[HierarchicalCategoryStats],
-        show_ids: bool,
-        indent: usize,
-    ) {
-        for stat in stats {
-            // 跳过金额为0的分类
-            if stat.total_amount == Decimal::ZERO && stat.direct_amount == Decimal::ZERO {
-                continue;
+            // 打印总计
+            let total: Decimal = stats.iter().map(|s| s.total_amount).sum();
+            println!("总计|{}|{}|100%", total, total);
+        }
+        OutputFormat::Human => {
+            let mut table = OutputTable::new(output_format);
+            table.set_header(vec!["分类", "直接金额", "汇总金额", "占比"]);
+
+            // 递归添加行
+            fn add_rows(
+                table: &mut OutputTable,
+                stats: &[HierarchicalCategoryStats],
+                show_ids: bool,
+                indent: usize,
+            ) {
+                for stat in stats {
+                    // 跳过金额为0的分类
+                    if stat.total_amount == Decimal::ZERO && stat.direct_amount == Decimal::ZERO {
+                        continue;
+                    }
+
+                    // 缩进前缀
+                    let prefix = "  ".repeat(indent);
+                    let display_name = if show_ids {
+                        format!("{}{}", prefix, stat.category_id)
+                    } else {
+                        format!("{}{}", prefix, stat.category_name)
+                    };
+
+                    // 直接金额（不为0时显示，负数表示退款）
+                    let direct_str = if stat.direct_amount != Decimal::ZERO {
+                        format!("¥{}", stat.direct_amount)
+                    } else {
+                        "-".to_string()
+                    };
+
+                    // 汇总金额（与直接金额不同或有子分类时显示）
+                    let total_str =
+                        if stat.total_amount != stat.direct_amount || !stat.children.is_empty() {
+                            format!("¥{}", stat.total_amount)
+                        } else {
+                            "-".to_string()
+                        };
+
+                    // 占比显示（正数为支出，负数为退款）
+                    let percentage_str = format!("{}%", stat.percentage);
+
+                    table.add_row(vec![
+                        &display_name,
+                        &direct_str,
+                        &total_str,
+                        &percentage_str,
+                    ]);
+
+                    // 递归添加子分类
+                    if !stat.children.is_empty() {
+                        add_rows(table, &stat.children, show_ids, indent + 1);
+                    }
+                }
             }
 
-            // 缩进前缀
-            let prefix = "  ".repeat(indent);
-            let display_name = if show_ids {
-                format!("{}{}", prefix, stat.category_id)
-            } else {
-                format!("{}{}", prefix, stat.category_name)
-            };
+            add_rows(&mut table, stats, show_ids, 0);
+            table.print();
 
-            // 直接金额（不为0时显示，负数表示退款）
-            let direct_str = if stat.direct_amount != Decimal::ZERO {
-                format!("¥{}", stat.direct_amount)
-            } else {
-                "-".to_string()
-            };
-
-            // 汇总金额（与直接金额不同或有子分类时显示）
-            let total_str = if stat.total_amount != stat.direct_amount || !stat.children.is_empty()
-            {
-                format!("¥{}", stat.total_amount)
-            } else {
-                "-".to_string()
-            };
-
-            // 占比显示（正数为支出，负数为退款）
-            let percentage_str = format!("{}%", stat.percentage);
-
-            table.add_row(vec![display_name, direct_str, total_str, percentage_str]);
-
-            // 递归添加子分类
-            if !stat.children.is_empty() {
-                add_rows(table, &stat.children, show_ids, indent + 1);
-            }
+            // 打印总计（净支出，已扣除退款）
+            let total: Decimal = stats.iter().map(|s| s.total_amount).sum();
+            print_empty_line();
+            println!("总支出: ¥{}", total);
         }
     }
+}
 
-    add_rows(&mut table, stats, show_ids, 0);
-    println!("{}", table);
+/// 机器可读格式的层级分类统计
+fn print_hierarchical_machine(stats: &[HierarchicalCategoryStats], show_ids: bool, prefix: &str) {
+    for stat in stats {
+        if stat.total_amount == Decimal::ZERO && stat.direct_amount == Decimal::ZERO {
+            continue;
+        }
 
-    // 打印总计（净支出，已扣除退款）
-    let total: Decimal = stats.iter().map(|s| s.total_amount).sum();
-    println!("\n总支出: ¥{}", total);
+        let display_name = if show_ids {
+            format!("{}{}", prefix, stat.category_id)
+        } else {
+            format!("{}{}", prefix, stat.category_name)
+        };
+
+        let direct_str = if stat.direct_amount != Decimal::ZERO {
+            stat.direct_amount.to_string()
+        } else {
+            "-".to_string()
+        };
+
+        let total_str = if stat.total_amount != stat.direct_amount || !stat.children.is_empty() {
+            stat.total_amount.to_string()
+        } else {
+            "-".to_string()
+        };
+
+        println!(
+            "{}|{}|{}|{}%",
+            display_name, direct_str, total_str, stat.percentage
+        );
+
+        if !stat.children.is_empty() {
+            let new_prefix = format!("{}/", display_name);
+            print_hierarchical_machine(&stat.children, show_ids, &new_prefix);
+        }
+    }
 }
 
 /// 打印账户统计结果
@@ -370,27 +514,37 @@ fn print_account_stats(
     account_stats: &[crate::db::surreal::AccountStats],
     show_ids: bool,
     single_account: bool,
+    output_format: OutputFormat,
 ) {
     if account_stats.is_empty() {
-        println!("\n[报表] 没有找到账户统计数据\n");
+        match output_format {
+            OutputFormat::Machine => println!("NO_DATA"),
+            OutputFormat::Human => println!("\n[报表] 没有找到账户统计数据\n"),
+        }
         return;
     }
 
     // 如果是单账户统计，简化标题
-    if single_account && account_stats.len() == 1 {
+    let title = if single_account && account_stats.len() == 1 {
         let stats = &account_stats[0];
         let display_name = if show_ids {
             &stats.account_id
         } else {
             &stats.account_name
         };
-        println!("\n[报表] 账户「{}」统计\n", display_name);
+        match output_format {
+            OutputFormat::Machine => format!("ACCOUNT_STATS:{}", display_name),
+            OutputFormat::Human => format!("账户「{}」统计", display_name),
+        }
     } else {
-        println!("\n[报表] 账户统计\n");
-    }
+        match output_format {
+            OutputFormat::Machine => "ACCOUNT_STATS".to_string(),
+            OutputFormat::Human => "账户统计".to_string(),
+        }
+    };
 
-    let mut table = Table::new();
-    table.set_header(vec!["账户", "总收入", "总支出", "净流入", "交易笔数"]);
+    print_title(&title, output_format);
+    print_empty_line();
 
     // 计算总计
     let mut total_income = Decimal::ZERO;
@@ -401,48 +555,83 @@ fn print_account_stats(
         total_income += stats.total_income;
         total_expense += stats.total_expense;
         total_count += stats.transaction_count;
-
-        let net_color = if stats.net_flow >= Decimal::ZERO {
-            "+"
-        } else {
-            ""
-        };
-        let display_name = if show_ids {
-            &stats.account_id
-        } else {
-            &stats.account_name
-        };
-
-        table.add_row(vec![
-            display_name,
-            &format!("¥{}", stats.total_income),
-            &format!("¥{}", stats.total_expense),
-            &format!("{}{}¥{}", net_color, "", stats.net_flow),
-            &stats.transaction_count.to_string(),
-        ]);
     }
 
-    // 添加总计行（只在多账户时显示）
-    if !single_account {
-        let net_total = total_income - total_expense;
-        let net_color = if net_total >= Decimal::ZERO { "+" } else { "" };
-        table.add_row(vec![
-            "─────────",
-            "─────────",
-            "─────────",
-            "─────────",
-            "─────────",
-        ]);
-        table.add_row(vec![
-            "总计",
-            &format!("¥{}", total_income),
-            &format!("¥{}", total_expense),
-            &format!("{}{}¥{}", net_color, "", net_total),
-            &total_count.to_string(),
-        ]);
-    }
+    match output_format {
+        OutputFormat::Machine => {
+            println!("账户|总收入|总支出|净流入|交易笔数");
+            for stats in account_stats {
+                let display_name = if show_ids {
+                    &stats.account_id
+                } else {
+                    &stats.account_name
+                };
+                println!(
+                    "{}|{}|{}|{}|{}",
+                    display_name,
+                    stats.total_income,
+                    stats.total_expense,
+                    stats.net_flow,
+                    stats.transaction_count
+                );
+            }
+            // 添加总计行（只在多账户时显示）
+            if !single_account {
+                let net_total = total_income - total_expense;
+                println!(
+                    "总计|{}|{}|{}|{}",
+                    total_income, total_expense, net_total, total_count
+                );
+            }
+        }
+        OutputFormat::Human => {
+            let mut table = OutputTable::new(output_format);
+            table.set_header(vec!["账户", "总收入", "总支出", "净流入", "交易笔数"]);
 
-    println!("{}", table);
+            for stats in account_stats {
+                let net_color = if stats.net_flow >= Decimal::ZERO {
+                    "+"
+                } else {
+                    ""
+                };
+                let display_name = if show_ids {
+                    &stats.account_id
+                } else {
+                    &stats.account_name
+                };
+
+                table.add_row(vec![
+                    display_name,
+                    &format!("¥{}", stats.total_income),
+                    &format!("¥{}", stats.total_expense),
+                    &format!("{}{}¥{}", net_color, "", stats.net_flow),
+                    &stats.transaction_count.to_string(),
+                ]);
+            }
+
+            // 添加总计行（只在多账户时显示）
+            if !single_account {
+                let net_total = total_income - total_expense;
+                let net_color = if net_total >= Decimal::ZERO { "+" } else { "" };
+                table.add_row(vec![
+                    "─────────",
+                    "─────────",
+                    "─────────",
+                    "─────────",
+                    "─────────",
+                ]);
+                table.add_row(vec![
+                    "总计",
+                    &format!("¥{}", total_income),
+                    &format!("¥{}", total_expense),
+                    &format!("{}{}¥{}", net_color, "", net_total),
+                    &total_count.to_string(),
+                ]);
+            }
+
+            table.print();
+        }
+    }
 }
 
 fn parse_month(month_str: &str) -> Result<(i32, u32)> {

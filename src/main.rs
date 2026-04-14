@@ -8,10 +8,12 @@ use suanpan::commands::{
     update, Cli, Commands,
 };
 use suanpan::db::surreal::Database;
+use suanpan::output::OutputFormat;
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
+    let output_format = OutputFormat::from(cli.human_readable);
 
     // 获取数据目录
     let data_dir = get_data_dir()?;
@@ -23,19 +25,19 @@ async fn main() -> Result<()> {
 
     // 执行命令
     match cli.command {
-        Commands::Account { command } => account::execute(&db, command).await?,
-        Commands::Add(args) => add::execute(&db, args).await?,
-        Commands::Category { command } => category::execute(&db, command).await?,
-        Commands::Compare(args) => compare::execute(&db, args).await?,
-        Commands::Import(args) => import::execute(&db, args).await?,
-        Commands::List(args) => list::execute(&db, args).await?,
-        Commands::Migrate(args) => migrate::execute(&db, args).await?,
-        Commands::Remove(args) => remove::execute(&db, args).await?,
-        Commands::Report(args) => report::execute(&db, args).await?,
-        Commands::Stats(args) => stats::execute(&db, args).await?,
-        Commands::Tag { command } => tag::execute(&db, command).await?,
-        Commands::Trend(args) => trend::execute(&db, args).await?,
-        Commands::Update(args) => update::execute(&db, args).await?,
+        Commands::Account { command } => account::execute(&db, command, output_format).await?,
+        Commands::Add(args) => add::execute(&db, args, output_format).await?,
+        Commands::Category { command } => category::execute(&db, command, output_format).await?,
+        Commands::Compare(args) => compare::execute(&db, args, output_format).await?,
+        Commands::Import(args) => import::execute(&db, args, output_format).await?,
+        Commands::List(args) => list::execute(&db, args, output_format).await?,
+        Commands::Migrate(args) => migrate::execute(&db, args, output_format).await?,
+        Commands::Remove(args) => remove::execute(&db, args, output_format).await?,
+        Commands::Report(args) => report::execute(&db, args, output_format).await?,
+        Commands::Stats(args) => stats::execute(&db, args, output_format).await?,
+        Commands::Tag { command } => tag::execute(&db, command, output_format).await?,
+        Commands::Trend(args) => trend::execute(&db, args, output_format).await?,
+        Commands::Update(args) => update::execute(&db, args, output_format).await?,
     }
 
     Ok(())

@@ -2,6 +2,7 @@ use clap::Args;
 
 use crate::db::surreal::Database;
 use crate::error::Result;
+use crate::output::{print_empty_line, print_error, print_success, OutputFormat};
 
 /// 移除交易记录
 #[derive(Args)]
@@ -10,17 +11,25 @@ pub struct RemoveArgs {
     pub ids: Vec<String>,
 }
 
-pub async fn execute(db: &Database, args: RemoveArgs) -> Result<()> {
+pub async fn execute(db: &Database, args: RemoveArgs, output_format: OutputFormat) -> Result<()> {
     if args.ids.is_empty() {
-        println!("[ERR] 请提供要移除的交易记录 ID");
-        println!("用法: finance remove <短ID> [短ID...]");
+        match output_format {
+            OutputFormat::Machine => println!("ERROR:NO_IDS"),
+            OutputFormat::Human => {
+                print_error("请提供要移除的交易记录 ID", output_format);
+                println!("用法: suanpan remove <短ID> [短ID...]");
+            }
+        }
         return Ok(());
     }
 
     // 验证所有 ID 格式
     for id in &args.ids {
         if id.len() != 12 {
-            println!("[ERR] ID '{}' 格式错误，应为 12 位字符", id);
+            print_error(
+                &format!("ID '{}' 格式错误，应为 12 位字符", id),
+                output_format,
+            );
             return Ok(());
         }
     }
@@ -32,20 +41,33 @@ pub async fn execute(db: &Database, args: RemoveArgs) -> Result<()> {
 
     for (id, success) in &results {
         if *success {
-            println!("[OK] 已移除: {}", id);
+            match output_format {
+                OutputFormat::Machine => println!("REMOVED:{}", id),
+                OutputFormat::Human => print_success(&format!("已移除: {}", id), output_format),
+            }
             success_count += 1;
         } else {
-            println!("[ERR] 未找到: {}", id);
+            match output_format {
+                OutputFormat::Machine => println!("NOT_FOUND:{}", id),
+                OutputFormat::Human => print_error(&format!("未找到: {}", id), output_format),
+            }
             fail_count += 1;
         }
     }
 
-    println!();
-    if success_count > 0 {
-        println!("成功移除 {} 条记录", success_count);
-    }
-    if fail_count > 0 {
-        println!("未找到 {} 条记录", fail_count);
+    print_empty_line();
+    match output_format {
+        OutputFormat::Machine => {
+            println!("RESULT:SUCCESS:{}:FAIL:{}", success_count, fail_count);
+        }
+        OutputFormat::Human => {
+            if success_count > 0 {
+                println!("成功移除 {} 条记录", success_count);
+            }
+            if fail_count > 0 {
+                println!("未找到 {} 条记录", fail_count);
+            }
+        }
     }
 
     Ok(())

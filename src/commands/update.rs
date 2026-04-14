@@ -4,6 +4,7 @@ use rust_decimal::Decimal;
 use crate::db::surreal::{Database, TransactionUpdate};
 use crate::error::Result;
 use crate::models::TxType;
+use crate::output::{print_error, print_success, OutputFormat};
 
 /// 更新交易记录
 #[derive(Args)]
@@ -44,10 +45,13 @@ pub struct UpdateArgs {
     pub tag: Vec<String>,
 }
 
-pub async fn execute(db: &Database, args: UpdateArgs) -> Result<()> {
+pub async fn execute(db: &Database, args: UpdateArgs, output_format: OutputFormat) -> Result<()> {
     // 验证 ID 格式
     if args.id.len() != 12 {
-        println!("[ERR] ID '{}' 格式错误，应为 12 位字符", args.id);
+        print_error(
+            &format!("ID '{}' 格式错误，应为 12 位字符", args.id),
+            output_format,
+        );
         return Ok(());
     }
 
@@ -61,8 +65,13 @@ pub async fn execute(db: &Database, args: UpdateArgs) -> Result<()> {
         && args.description.is_none()
         && args.tag.is_empty()
     {
-        println!("[ERR] 请至少指定一个要更新的字段");
-        println!("用法: finance update <短ID> -a 40 -d \"新描述\"");
+        match output_format {
+            OutputFormat::Machine => println!("ERROR:NO_FIELDS"),
+            OutputFormat::Human => {
+                print_error("请至少指定一个要更新的字段", output_format);
+                println!("用法: suanpan update <短ID> -a 40 -d \"新描述\"");
+            }
+        }
         return Ok(());
     }
 
@@ -74,7 +83,6 @@ pub async fn execute(db: &Database, args: UpdateArgs) -> Result<()> {
     };
 
     // 构建更新参数
-    // TODO: 批次2将添加账户/分类/标签的自动查找/创建
     let updates = TransactionUpdate {
         amount: args.amount,
         currency: args.currency,
@@ -100,27 +108,46 @@ pub async fn execute(db: &Database, args: UpdateArgs) -> Result<()> {
 
     // 执行更新
     match db.update_by_short_id(&args.id, updates).await? {
-        Some(tx) => {
-            println!("[OK] 交易记录已更新:");
-            println!("   ID: {:?}", tx.id);
-            println!("   类型: {}", tx.tx_type);
-            println!("   金额: {} {}", tx.amount, tx.currency);
-            println!(
-                "   账户: {} -> {}",
-                tx.account_from_id,
-                tx.account_to_id.as_deref().unwrap_or("-")
-            );
-            println!("   分类: {}", tx.category_id);
-            if let Some(desc) = &tx.description {
-                println!("   描述: {}", desc);
+        Some(tx) => match output_format {
+            OutputFormat::Machine => {
+                println!(
+                    "UPDATED:{}:{}:{}:{}:{}:{}:{}:{}",
+                    args.id,
+                    tx.tx_type,
+                    tx.amount,
+                    tx.currency,
+                    tx.account_from_id,
+                    tx.account_to_id.as_deref().unwrap_or("-"),
+                    tx.category_id,
+                    tx.description.as_deref().unwrap_or("-")
+                );
             }
-            if !tx.tag_ids.is_empty() {
-                println!("   标签: {}", tx.tag_ids.join(", "));
+            OutputFormat::Human => {
+                print_success("交易记录已更新:", output_format);
+                println!("   ID: {:?}", tx.id);
+                println!("   类型: {}", tx.tx_type);
+                println!("   金额: {} {}", tx.amount, tx.currency);
+                println!(
+                    "   账户: {} -> {}",
+                    tx.account_from_id,
+                    tx.account_to_id.as_deref().unwrap_or("-")
+                );
+                println!("   分类: {}", tx.category_id);
+                if let Some(desc) = &tx.description {
+                    println!("   描述: {}", desc);
+                }
+                if !tx.tag_ids.is_empty() {
+                    println!("   标签: {}", tx.tag_ids.join(", "));
+                }
             }
-        }
-        None => {
-            println!("[ERR] 未找到 ID 为 '{}' 的交易记录", args.id);
-        }
+        },
+        None => match output_format {
+            OutputFormat::Machine => println!("NOT_FOUND:{}", args.id),
+            OutputFormat::Human => print_error(
+                &format!("未找到 ID 为 '{}' 的交易记录", args.id),
+                output_format,
+            ),
+        },
     }
 
     Ok(())

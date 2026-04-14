@@ -4,6 +4,7 @@ use rust_decimal::Decimal;
 use crate::db::surreal::Database;
 use crate::error::Result;
 use crate::models::{Transaction, TxType};
+use crate::output::{print_success, OutputFormat};
 
 /// 添加交易记录
 #[derive(Args)]
@@ -77,7 +78,7 @@ impl From<TxTypeArg> for TxType {
     }
 }
 
-pub async fn execute(db: &Database, args: AddArgs) -> Result<()> {
+pub async fn execute(db: &Database, args: AddArgs, output_format: OutputFormat) -> Result<()> {
     let tx_type: TxType = args.tx_type.into();
 
     // 查找或创建来源账户
@@ -114,24 +115,56 @@ pub async fn execute(db: &Database, args: AddArgs) -> Result<()> {
 
     let created = db.create_transaction(transaction).await?;
 
-    println!("[OK] 交易记录已创建:");
-    println!("   ID: {:?}", created.id);
-    println!("   类型: {}", created.tx_type);
-    println!("   金额: {} {}", created.amount, created.currency);
-    println!(
-        "   账户: {} -> {}",
-        created.account_from_id,
-        created.account_to_id.as_deref().unwrap_or("-")
-    );
-    println!("   分类: {}", created.category_id);
-    if let Some(desc) = &created.description {
-        println!("   描述: {}", desc);
-    }
-    if !created.tag_ids.is_empty() {
-        println!("   标签: {}", created.tag_ids.join(", "));
+    match output_format {
+        OutputFormat::Machine => {
+            println!(
+                "CREATED:{}:{}:{}:{}:{}:{}:{}:{}",
+                format_short_id(&created.id),
+                created.tx_type,
+                created.amount,
+                created.currency,
+                created.account_from_id,
+                created.account_to_id.as_deref().unwrap_or("-"),
+                created.category_id,
+                created.description.as_deref().unwrap_or("-")
+            );
+        }
+        OutputFormat::Human => {
+            print_success("交易记录已创建:", output_format);
+            println!("   ID: {:?}", created.id);
+            println!("   类型: {}", created.tx_type);
+            println!("   金额: {} {}", created.amount, created.currency);
+            println!(
+                "   账户: {} -> {}",
+                created.account_from_id,
+                created.account_to_id.as_deref().unwrap_or("-")
+            );
+            println!("   分类: {}", created.category_id);
+            if let Some(desc) = &created.description {
+                println!("   描述: {}", desc);
+            }
+            if !created.tag_ids.is_empty() {
+                println!("   标签: {}", created.tag_ids.join(", "));
+            }
+        }
     }
 
     Ok(())
+}
+
+/// 从 RecordId 提取短 ID（前12位）
+fn format_short_id(id: &Option<surrealdb::RecordId>) -> String {
+    match id {
+        Some(rid) => {
+            let full_id = rid.to_string();
+            full_id
+                .split(':')
+                .nth(1)
+                .map(|s| s.chars().take(12).collect())
+                .unwrap_or_else(|| "unknown".to_string())
+        }
+        None => "unknown".to_string(),
+    }
 }
 
 #[cfg(test)]

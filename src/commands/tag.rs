@@ -3,6 +3,9 @@ use clap::{Args, Subcommand};
 use crate::db::surreal::Database;
 use crate::error::Result;
 use crate::models::Tag;
+use crate::output::{
+    print_empty_line, print_error, print_success, print_title, OutputFormat, OutputTable,
+};
 
 /// 标签管理子命令
 #[derive(Subcommand)]
@@ -44,42 +47,63 @@ pub struct TagRemoveArgs {
     pub id_or_name: String,
 }
 
-pub async fn execute(db: &Database, command: TagCommands) -> Result<()> {
+pub async fn execute(
+    db: &Database,
+    command: TagCommands,
+    output_format: OutputFormat,
+) -> Result<()> {
     match command {
-        TagCommands::List => list_tags(db).await,
-        TagCommands::Add(args) => add_tag(db, args).await,
-        TagCommands::Rename(args) => rename_tag(db, args).await,
-        TagCommands::Remove(args) => remove_tag(db, args).await,
+        TagCommands::List => list_tags(db, output_format).await,
+        TagCommands::Add(args) => add_tag(db, args, output_format).await,
+        TagCommands::Rename(args) => rename_tag(db, args, output_format).await,
+        TagCommands::Remove(args) => remove_tag(db, args, output_format).await,
     }
 }
 
-async fn list_tags(db: &Database) -> Result<()> {
+async fn list_tags(db: &Database, output_format: OutputFormat) -> Result<()> {
     let tags = db.list_tags().await?;
 
     if tags.is_empty() {
-        println!("暂无标签");
+        match output_format {
+            OutputFormat::Machine => println!("NO_DATA"),
+            OutputFormat::Human => println!("暂无标签"),
+        }
         return Ok(());
     }
 
-    println!("\n[列表] 标签列表\n");
-    println!("{:<20} {:<10} 名称", "ID", "颜色");
-    println!("{}", "-".repeat(50));
+    match output_format {
+        OutputFormat::Machine => {
+            println!("ID|颜色|名称");
+            for tag in tags {
+                let color = tag.color.as_deref().unwrap_or("-");
+                println!("{}|{}|{}", tag.id, color, tag.name);
+            }
+        }
+        OutputFormat::Human => {
+            print_title("标签列表", output_format);
+            print_empty_line();
 
-    for tag in tags {
-        let color = tag.color.as_deref().unwrap_or("-");
-        println!("{:<20} {:<10} {}", tag.id, color, tag.name);
+            let mut table = OutputTable::new(output_format);
+            table.set_header(vec!["ID", "颜色", "名称"]);
+
+            for tag in tags {
+                let color = tag.color.as_deref().unwrap_or("-");
+                table.add_row(vec![&tag.id, color, &tag.name]);
+            }
+            table.print();
+            print_empty_line();
+        }
     }
-    println!();
 
     Ok(())
 }
 
-async fn add_tag(db: &Database, args: TagAddArgs) -> Result<()> {
+async fn add_tag(db: &Database, args: TagAddArgs, output_format: OutputFormat) -> Result<()> {
     // 检查是否已存在同名标签
     if let Some(existing) = db.find_tag_by_name(&args.name).await? {
-        println!(
-            "[ERR] 已存在同名标签: {} (ID: {})",
-            existing.name, existing.id
+        print_error(
+            &format!("已存在同名标签: {} (ID: {})", existing.name, existing.id),
+            output_format,
         );
         return Ok(());
     }
@@ -87,7 +111,10 @@ async fn add_tag(db: &Database, args: TagAddArgs) -> Result<()> {
     // 验证颜色格式
     if let Some(ref color) = args.color {
         if !Tag::is_valid_color(color) {
-            println!("[ERR] 无效的颜色格式: {} (应为 #RGB 或 #RRGGBB)", color);
+            print_error(
+                &format!("无效的颜色格式: {} (应为 #RGB 或 #RRGGBB)", color),
+                output_format,
+            );
             return Ok(());
         }
     }
@@ -101,33 +128,46 @@ async fn add_tag(db: &Database, args: TagAddArgs) -> Result<()> {
     }
 
     let created = db.create_tag(tag).await?;
-    println!("[OK] 标签已创建:");
-    println!("   ID: {}", created.id);
-    println!("   名称: {}", created.name);
-    if let Some(color) = &created.color {
-        println!("   颜色: {}", color);
+
+    match output_format {
+        OutputFormat::Machine => {
+            println!(
+                "CREATED:{}:{}:{}",
+                created.id,
+                created.name,
+                created.color.as_deref().unwrap_or("-")
+            );
+        }
+        OutputFormat::Human => {
+            print_success("标签已创建:", output_format);
+            println!("   ID: {}", created.id);
+            println!("   名称: {}", created.name);
+            if let Some(color) = &created.color {
+                println!("   颜色: {}", color);
+            }
+        }
     }
 
     Ok(())
 }
 
-async fn rename_tag(db: &Database, args: TagRenameArgs) -> Result<()> {
+async fn rename_tag(db: &Database, args: TagRenameArgs, output_format: OutputFormat) -> Result<()> {
     // 尝试查找标签
     let tag = if let Some(tag) = db.find_tag_by_name(&args.id_or_name).await? {
         tag
     } else if let Some(tag) = db.get_tag(&args.id_or_name).await? {
         tag
     } else {
-        println!("[ERR] 标签不存在: {}", args.id_or_name);
+        print_error(&format!("标签不存在: {}", args.id_or_name), output_format);
         return Ok(());
     };
 
     // 检查新名称是否已被使用
     if let Some(existing) = db.find_tag_by_name(&args.new_name).await? {
         if existing.id != tag.id {
-            println!(
-                "[ERR] 名称 '{}' 已被标签 {} 使用",
-                args.new_name, existing.id
+            print_error(
+                &format!("名称 '{}' 已被标签 {} 使用", args.new_name, existing.id),
+                output_format,
             );
             return Ok(());
         }
@@ -135,26 +175,46 @@ async fn rename_tag(db: &Database, args: TagRenameArgs) -> Result<()> {
 
     let updated = db.update_tag(&tag.id, &args.new_name).await?;
     if let Some(t) = updated {
-        println!("[OK] 标签已重命名: {} -> {}", tag.name, t.name);
+        match output_format {
+            OutputFormat::Machine => {
+                println!("RENAMED:{}:{}:{}", tag.id, tag.name, t.name);
+            }
+            OutputFormat::Human => {
+                print_success(
+                    &format!("标签已重命名: {} -> {}", tag.name, t.name),
+                    output_format,
+                );
+            }
+        }
     }
 
     Ok(())
 }
 
-async fn remove_tag(db: &Database, args: TagRemoveArgs) -> Result<()> {
+async fn remove_tag(db: &Database, args: TagRemoveArgs, output_format: OutputFormat) -> Result<()> {
     // 尝试查找标签
     let tag = if let Some(tag) = db.find_tag_by_name(&args.id_or_name).await? {
         tag
     } else if let Some(tag) = db.get_tag(&args.id_or_name).await? {
         tag
     } else {
-        println!("[ERR] 标签不存在: {}", args.id_or_name);
+        print_error(&format!("标签不存在: {}", args.id_or_name), output_format);
         return Ok(());
     };
 
     let removed = db.delete_tag(&tag.id).await?;
     if removed {
-        println!("[OK] 标签已移除: {} ({})", tag.name, tag.id);
+        match output_format {
+            OutputFormat::Machine => {
+                println!("REMOVED:{}:{}:{}", tag.id, tag.name, tag.id);
+            }
+            OutputFormat::Human => {
+                print_success(
+                    &format!("标签已移除: {} ({})", tag.name, tag.id),
+                    output_format,
+                );
+            }
+        }
     }
 
     Ok(())

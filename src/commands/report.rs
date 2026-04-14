@@ -9,6 +9,7 @@ use crate::db::surreal::Database;
 use crate::error::Result;
 use crate::models::transaction::Transaction;
 use crate::models::types::TxType;
+use crate::output::{print_empty_line, print_success, OutputFormat};
 
 /// 生成 HTML 报表
 #[derive(Args)]
@@ -43,7 +44,7 @@ struct DailyStat {
     expense: Decimal,
 }
 
-pub async fn execute(db: &Database, args: ReportArgs) -> Result<()> {
+pub async fn execute(db: &Database, args: ReportArgs, output_format: OutputFormat) -> Result<()> {
     let month = match args.month {
         Some(m) => m,
         None => Local::now().format("%Y-%m").to_string(),
@@ -61,17 +62,26 @@ pub async fn execute(db: &Database, args: ReportArgs) -> Result<()> {
     let start_dt = Utc.from_utc_datetime(&start_date.and_hms_opt(0, 0, 0).unwrap());
     let end_dt = Utc.from_utc_datetime(&end_date.and_hms_opt(0, 0, 0).unwrap());
 
-    println!("[报表] 正在生成 {} 月报表...", month);
+    match output_format {
+        OutputFormat::Machine => println!("GENERATING:{}", month),
+        OutputFormat::Human => println!("[报表] 正在生成 {} 月报表...", month),
+    }
 
     // 获取当月交易数据
     let transactions = db.query_by_date_range(start_dt, end_dt).await?;
 
     if transactions.is_empty() {
-        println!("[WARN] {} 月暂无交易记录", month);
+        match output_format {
+            OutputFormat::Machine => println!("NO_DATA:{}", month),
+            OutputFormat::Human => println!("[WARN] {} 月暂无交易记录", month),
+        }
         return Ok(());
     }
 
-    println!("   找到 {} 条交易记录", transactions.len());
+    match output_format {
+        OutputFormat::Machine => println!("FOUND:{}", transactions.len()),
+        OutputFormat::Human => println!("   找到 {} 条交易记录", transactions.len()),
+    }
 
     // 确保输出目录存在
     fs::create_dir_all(&args.output)?;
@@ -95,10 +105,20 @@ pub async fn execute(db: &Database, args: ReportArgs) -> Result<()> {
         &html_path,
         &month,
     )?;
-    println!("   [OK] HTML 报表: {}", html_path.display());
 
-    println!("\n[完成] 报表生成完成！");
-    println!("   请用浏览器打开: {}", html_path.display());
+    match output_format {
+        OutputFormat::Machine => println!("HTML:{}", html_path.display()),
+        OutputFormat::Human => println!("   [OK] HTML 报表: {}", html_path.display()),
+    }
+
+    print_empty_line();
+    match output_format {
+        OutputFormat::Machine => println!("DONE:{}", html_path.display()),
+        OutputFormat::Human => {
+            print_success("报表生成完成！", output_format);
+            println!("   请用浏览器打开: {}", html_path.display());
+        }
+    }
 
     Ok(())
 }

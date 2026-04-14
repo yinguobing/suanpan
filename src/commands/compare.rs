@@ -1,10 +1,10 @@
 use chrono::NaiveDate;
 use clap::Args;
-use comfy_table::Table;
 use rust_decimal::Decimal;
 
 use crate::db::surreal::Database;
 use crate::error::Result;
+use crate::output::{print_empty_line, print_title, OutputFormat, OutputTable};
 
 /// 时间段对比分析（环比/同比）
 #[derive(Args)]
@@ -18,7 +18,7 @@ pub struct CompareArgs {
     pub compare_type: String,
 }
 
-pub async fn execute(db: &Database, args: CompareArgs) -> Result<()> {
+pub async fn execute(db: &Database, args: CompareArgs, output_format: OutputFormat) -> Result<()> {
     // 解析目标月份
     let (year, month) = parse_month(&args.month)?;
 
@@ -43,22 +43,28 @@ pub async fn execute(db: &Database, args: CompareArgs) -> Result<()> {
         )
         .await?;
 
-    println!("\n[报表] {}年{}月 财务对比分析\n", year, month);
+    // 打印标题
+    let title = match output_format {
+        OutputFormat::Machine => format!("COMPARE:{}-{}", year, month),
+        OutputFormat::Human => format!("{}年{}月 财务对比分析", year, month),
+    };
+    print_title(&title, output_format);
+    print_empty_line();
 
     // 打印目标月份概览
-    print_overview(&target_stats);
+    print_overview(&target_stats, output_format);
 
     // 根据对比类型执行对比
     match compare_type {
         CompareType::Mom => {
-            print_mom_comparison(db, year, month, &target_stats).await?;
+            print_mom_comparison(db, year, month, &target_stats, output_format).await?;
         }
         CompareType::Yoy => {
-            print_yoy_comparison(db, year, month, &target_stats).await?;
+            print_yoy_comparison(db, year, month, &target_stats, output_format).await?;
         }
         CompareType::Both => {
-            print_mom_comparison(db, year, month, &target_stats).await?;
-            print_yoy_comparison(db, year, month, &target_stats).await?;
+            print_mom_comparison(db, year, month, &target_stats, output_format).await?;
+            print_yoy_comparison(db, year, month, &target_stats, output_format).await?;
         }
     }
 
@@ -73,26 +79,38 @@ enum CompareType {
 }
 
 /// 打印概览
-fn print_overview(stats: &crate::db::surreal::PeriodStats) {
-    let mut table = Table::new();
-    table.set_header(vec!["项目", "金额", "笔数"]);
-    table.add_row(vec![
-        "总收入",
-        &format!("¥{}", stats.total_income),
-        &stats.transaction_count.to_string(),
-    ]);
-    table.add_row(vec!["总支出", &format!("¥{}", stats.total_expense), ""]);
+fn print_overview(stats: &crate::db::surreal::PeriodStats, output_format: OutputFormat) {
+    match output_format {
+        OutputFormat::Machine => {
+            println!("OVERVIEW");
+            println!("项目|金额|笔数");
+            println!("总收入|{}|{}", stats.total_income, stats.transaction_count);
+            println!("总支出|{}|", stats.total_expense);
+            let net = stats.total_income - stats.total_expense;
+            println!("净收支|{}|", net);
+        }
+        OutputFormat::Human => {
+            let mut table = OutputTable::new(output_format);
+            table.set_header(vec!["项目", "金额", "笔数"]);
+            table.add_row(vec![
+                "总收入",
+                &format!("¥{}", stats.total_income),
+                &stats.transaction_count.to_string(),
+            ]);
+            table.add_row(vec!["总支出", &format!("¥{}", stats.total_expense), ""]);
 
-    let net = stats.total_income - stats.total_expense;
-    let net_str = if net >= Decimal::ZERO {
-        format!("+¥{}", net)
-    } else {
-        format!("-¥{}", net.abs())
-    };
-    table.add_row(vec!["净收支", &net_str, ""]);
+            let net = stats.total_income - stats.total_expense;
+            let net_str = if net >= Decimal::ZERO {
+                format!("+¥{}", net)
+            } else {
+                format!("-¥{}", net.abs())
+            };
+            table.add_row(vec!["净收支", &net_str, ""]);
 
-    println!("{}", table);
-    println!();
+            table.print();
+            print_empty_line();
+        }
+    }
 }
 
 /// 打印环比对比
@@ -101,6 +119,7 @@ async fn print_mom_comparison(
     year: i32,
     month: u32,
     target_stats: &crate::db::surreal::PeriodStats,
+    output_format: OutputFormat,
 ) -> Result<()> {
     // 计算上月
     let (prev_year, prev_month) = if month == 1 {
@@ -121,79 +140,153 @@ async fn print_mom_comparison(
         )
         .await?;
 
-    println!("[对比] 环比对比（vs {}年{}月）", prev_year, prev_month);
-    println!();
-
-    let mut table = Table::new();
-    table.set_header(vec!["项目", "本月", "上月", "变化", "变化率"]);
-
-    // 收入对比
-    let income_change = target_stats.total_income - prev_stats.total_income;
-    let income_change_pct = if prev_stats.total_income > Decimal::ZERO {
-        (income_change / prev_stats.total_income * Decimal::from(100)).round_dp(1)
-    } else {
-        Decimal::ZERO
+    let title = match output_format {
+        OutputFormat::Machine => format!("MOM:{}-{}", prev_year, prev_month),
+        OutputFormat::Human => format!("环比对比（vs {}年{}月）", prev_year, prev_month),
     };
-    table.add_row(vec![
-        "收入",
-        &format!("¥{}", target_stats.total_income),
-        &format!("¥{}", prev_stats.total_income),
-        &format_change(income_change),
-        &format_change_pct(income_change_pct),
-    ]);
+    print_title(&title, output_format);
+    print_empty_line();
 
-    // 支出对比
-    let expense_change = target_stats.total_expense - prev_stats.total_expense;
-    let expense_change_pct = if prev_stats.total_expense > Decimal::ZERO {
-        (expense_change / prev_stats.total_expense * Decimal::from(100)).round_dp(1)
-    } else {
-        Decimal::ZERO
-    };
-    table.add_row(vec![
-        "支出",
-        &format!("¥{}", target_stats.total_expense),
-        &format!("¥{}", prev_stats.total_expense),
-        &format_change(expense_change),
-        &format_change_pct(expense_change_pct),
-    ]);
+    match output_format {
+        OutputFormat::Machine => {
+            println!("项目|本月|上月|变化|变化率");
 
-    // 净收支对比
-    let target_net = target_stats.total_income - target_stats.total_expense;
-    let prev_net = prev_stats.total_income - prev_stats.total_expense;
-    let net_change = target_net - prev_net;
-    let net_change_pct = if prev_net != Decimal::ZERO {
-        (net_change / prev_net.abs() * Decimal::from(100)).round_dp(1)
-    } else {
-        Decimal::ZERO
-    };
-    table.add_row(vec![
-        "净收支",
-        &format_net(target_net),
-        &format_net(prev_net),
-        &format_change(net_change),
-        &format_change_pct(net_change_pct),
-    ]);
+            // 收入对比
+            let income_change = target_stats.total_income - prev_stats.total_income;
+            let income_change_pct = if prev_stats.total_income > Decimal::ZERO {
+                (income_change / prev_stats.total_income * Decimal::from(100)).round_dp(1)
+            } else {
+                Decimal::ZERO
+            };
+            println!(
+                "收入|{}|{}|{}|{}%",
+                target_stats.total_income,
+                prev_stats.total_income,
+                income_change,
+                income_change_pct
+            );
 
-    // 交易笔数对比
-    let count_change = target_stats.transaction_count as i64 - prev_stats.transaction_count as i64;
-    let count_change_pct = if prev_stats.transaction_count > 0 {
-        (Decimal::from(count_change) / Decimal::from(prev_stats.transaction_count)
-            * Decimal::from(100))
-        .round_dp(1)
-    } else {
-        Decimal::ZERO
-    };
-    table.add_row(vec![
-        "交易笔数",
-        &target_stats.transaction_count.to_string(),
-        &prev_stats.transaction_count.to_string(),
-        &format!("{:+}", count_change),
-        &format_change_pct(count_change_pct),
-    ]);
+            // 支出对比
+            let expense_change = target_stats.total_expense - prev_stats.total_expense;
+            let expense_change_pct = if prev_stats.total_expense > Decimal::ZERO {
+                (expense_change / prev_stats.total_expense * Decimal::from(100)).round_dp(1)
+            } else {
+                Decimal::ZERO
+            };
+            println!(
+                "支出|{}|{}|{}|{}%",
+                target_stats.total_expense,
+                prev_stats.total_expense,
+                expense_change,
+                expense_change_pct
+            );
 
-    println!("{}", table);
-    println!();
+            // 净收支对比
+            let target_net = target_stats.total_income - target_stats.total_expense;
+            let prev_net = prev_stats.total_income - prev_stats.total_expense;
+            let net_change = target_net - prev_net;
+            let net_change_pct = if prev_net != Decimal::ZERO {
+                (net_change / prev_net.abs() * Decimal::from(100)).round_dp(1)
+            } else {
+                Decimal::ZERO
+            };
+            println!(
+                "净收支|{}|{}|{}|{}%",
+                target_net, prev_net, net_change, net_change_pct
+            );
 
+            // 交易笔数对比
+            let count_change =
+                target_stats.transaction_count as i64 - prev_stats.transaction_count as i64;
+            let count_change_pct = if prev_stats.transaction_count > 0 {
+                (Decimal::from(count_change) / Decimal::from(prev_stats.transaction_count)
+                    * Decimal::from(100))
+                .round_dp(1)
+            } else {
+                Decimal::ZERO
+            };
+            println!(
+                "交易笔数|{}|{}|{}|{}%",
+                target_stats.transaction_count,
+                prev_stats.transaction_count,
+                count_change,
+                count_change_pct
+            );
+        }
+        OutputFormat::Human => {
+            let mut table = OutputTable::new(output_format);
+            table.set_header(vec!["项目", "本月", "上月", "变化", "变化率"]);
+
+            // 收入对比
+            let income_change = target_stats.total_income - prev_stats.total_income;
+            let income_change_pct = if prev_stats.total_income > Decimal::ZERO {
+                (income_change / prev_stats.total_income * Decimal::from(100)).round_dp(1)
+            } else {
+                Decimal::ZERO
+            };
+            table.add_row(vec![
+                "收入",
+                &format!("¥{}", target_stats.total_income),
+                &format!("¥{}", prev_stats.total_income),
+                &format_change(income_change),
+                &format_change_pct(income_change_pct),
+            ]);
+
+            // 支出对比
+            let expense_change = target_stats.total_expense - prev_stats.total_expense;
+            let expense_change_pct = if prev_stats.total_expense > Decimal::ZERO {
+                (expense_change / prev_stats.total_expense * Decimal::from(100)).round_dp(1)
+            } else {
+                Decimal::ZERO
+            };
+            table.add_row(vec![
+                "支出",
+                &format!("¥{}", target_stats.total_expense),
+                &format!("¥{}", prev_stats.total_expense),
+                &format_change(expense_change),
+                &format_change_pct(expense_change_pct),
+            ]);
+
+            // 净收支对比
+            let target_net = target_stats.total_income - target_stats.total_expense;
+            let prev_net = prev_stats.total_income - prev_stats.total_expense;
+            let net_change = target_net - prev_net;
+            let net_change_pct = if prev_net != Decimal::ZERO {
+                (net_change / prev_net.abs() * Decimal::from(100)).round_dp(1)
+            } else {
+                Decimal::ZERO
+            };
+            table.add_row(vec![
+                "净收支",
+                &format_net(target_net),
+                &format_net(prev_net),
+                &format_change(net_change),
+                &format_change_pct(net_change_pct),
+            ]);
+
+            // 交易笔数对比
+            let count_change =
+                target_stats.transaction_count as i64 - prev_stats.transaction_count as i64;
+            let count_change_pct = if prev_stats.transaction_count > 0 {
+                (Decimal::from(count_change) / Decimal::from(prev_stats.transaction_count)
+                    * Decimal::from(100))
+                .round_dp(1)
+            } else {
+                Decimal::ZERO
+            };
+            table.add_row(vec![
+                "交易笔数",
+                &target_stats.transaction_count.to_string(),
+                &prev_stats.transaction_count.to_string(),
+                &format!("{:+}", count_change),
+                &format_change_pct(count_change_pct),
+            ]);
+
+            table.print();
+        }
+    }
+
+    print_empty_line();
     Ok(())
 }
 
@@ -203,6 +296,7 @@ async fn print_yoy_comparison(
     year: i32,
     month: u32,
     target_stats: &crate::db::surreal::PeriodStats,
+    output_format: OutputFormat,
 ) -> Result<()> {
     // 计算去年同期
     let last_year = year - 1;
@@ -223,79 +317,150 @@ async fn print_yoy_comparison(
         )
         .await?;
 
-    println!("[对比] 同比对比（vs {}年{}月）", last_year, month);
-    println!();
-
-    let mut table = Table::new();
-    table.set_header(vec!["项目", "本月", "去年同期", "变化", "变化率"]);
-
-    // 收入对比
-    let income_change = target_stats.total_income - yoy_stats.total_income;
-    let income_change_pct = if yoy_stats.total_income > Decimal::ZERO {
-        (income_change / yoy_stats.total_income * Decimal::from(100)).round_dp(1)
-    } else {
-        Decimal::ZERO
+    let title = match output_format {
+        OutputFormat::Machine => format!("YOY:{}-{}", last_year, month),
+        OutputFormat::Human => format!("同比对比（vs {}年{}月）", last_year, month),
     };
-    table.add_row(vec![
-        "收入",
-        &format!("¥{}", target_stats.total_income),
-        &format!("¥{}", yoy_stats.total_income),
-        &format_change(income_change),
-        &format_change_pct(income_change_pct),
-    ]);
+    print_title(&title, output_format);
+    print_empty_line();
 
-    // 支出对比
-    let expense_change = target_stats.total_expense - yoy_stats.total_expense;
-    let expense_change_pct = if yoy_stats.total_expense > Decimal::ZERO {
-        (expense_change / yoy_stats.total_expense * Decimal::from(100)).round_dp(1)
-    } else {
-        Decimal::ZERO
-    };
-    table.add_row(vec![
-        "支出",
-        &format!("¥{}", target_stats.total_expense),
-        &format!("¥{}", yoy_stats.total_expense),
-        &format_change(expense_change),
-        &format_change_pct(expense_change_pct),
-    ]);
+    match output_format {
+        OutputFormat::Machine => {
+            println!("项目|本月|去年同期|变化|变化率");
 
-    // 净收支对比
-    let target_net = target_stats.total_income - target_stats.total_expense;
-    let yoy_net = yoy_stats.total_income - yoy_stats.total_expense;
-    let net_change = target_net - yoy_net;
-    let net_change_pct = if yoy_net != Decimal::ZERO {
-        (net_change / yoy_net.abs() * Decimal::from(100)).round_dp(1)
-    } else {
-        Decimal::ZERO
-    };
-    table.add_row(vec![
-        "净收支",
-        &format_net(target_net),
-        &format_net(yoy_net),
-        &format_change(net_change),
-        &format_change_pct(net_change_pct),
-    ]);
+            // 收入对比
+            let income_change = target_stats.total_income - yoy_stats.total_income;
+            let income_change_pct = if yoy_stats.total_income > Decimal::ZERO {
+                (income_change / yoy_stats.total_income * Decimal::from(100)).round_dp(1)
+            } else {
+                Decimal::ZERO
+            };
+            println!(
+                "收入|{}|{}|{}|{}%",
+                target_stats.total_income, yoy_stats.total_income, income_change, income_change_pct
+            );
 
-    // 交易笔数对比
-    let count_change = target_stats.transaction_count as i64 - yoy_stats.transaction_count as i64;
-    let count_change_pct = if yoy_stats.transaction_count > 0 {
-        (Decimal::from(count_change) / Decimal::from(yoy_stats.transaction_count)
-            * Decimal::from(100))
-        .round_dp(1)
-    } else {
-        Decimal::ZERO
-    };
-    table.add_row(vec![
-        "交易笔数",
-        &target_stats.transaction_count.to_string(),
-        &yoy_stats.transaction_count.to_string(),
-        &format!("{:+}", count_change),
-        &format_change_pct(count_change_pct),
-    ]);
+            // 支出对比
+            let expense_change = target_stats.total_expense - yoy_stats.total_expense;
+            let expense_change_pct = if yoy_stats.total_expense > Decimal::ZERO {
+                (expense_change / yoy_stats.total_expense * Decimal::from(100)).round_dp(1)
+            } else {
+                Decimal::ZERO
+            };
+            println!(
+                "支出|{}|{}|{}|{}%",
+                target_stats.total_expense,
+                yoy_stats.total_expense,
+                expense_change,
+                expense_change_pct
+            );
 
-    println!("{}", table);
-    println!();
+            // 净收支对比
+            let target_net = target_stats.total_income - target_stats.total_expense;
+            let yoy_net = yoy_stats.total_income - yoy_stats.total_expense;
+            let net_change = target_net - yoy_net;
+            let net_change_pct = if yoy_net != Decimal::ZERO {
+                (net_change / yoy_net.abs() * Decimal::from(100)).round_dp(1)
+            } else {
+                Decimal::ZERO
+            };
+            println!(
+                "净收支|{}|{}|{}|{}%",
+                target_net, yoy_net, net_change, net_change_pct
+            );
 
+            // 交易笔数对比
+            let count_change =
+                target_stats.transaction_count as i64 - yoy_stats.transaction_count as i64;
+            let count_change_pct = if yoy_stats.transaction_count > 0 {
+                (Decimal::from(count_change) / Decimal::from(yoy_stats.transaction_count)
+                    * Decimal::from(100))
+                .round_dp(1)
+            } else {
+                Decimal::ZERO
+            };
+            println!(
+                "交易笔数|{}|{}|{}|{}%",
+                target_stats.transaction_count,
+                yoy_stats.transaction_count,
+                count_change,
+                count_change_pct
+            );
+        }
+        OutputFormat::Human => {
+            let mut table = OutputTable::new(output_format);
+            table.set_header(vec!["项目", "本月", "去年同期", "变化", "变化率"]);
+
+            // 收入对比
+            let income_change = target_stats.total_income - yoy_stats.total_income;
+            let income_change_pct = if yoy_stats.total_income > Decimal::ZERO {
+                (income_change / yoy_stats.total_income * Decimal::from(100)).round_dp(1)
+            } else {
+                Decimal::ZERO
+            };
+            table.add_row(vec![
+                "收入",
+                &format!("¥{}", target_stats.total_income),
+                &format!("¥{}", yoy_stats.total_income),
+                &format_change(income_change),
+                &format_change_pct(income_change_pct),
+            ]);
+
+            // 支出对比
+            let expense_change = target_stats.total_expense - yoy_stats.total_expense;
+            let expense_change_pct = if yoy_stats.total_expense > Decimal::ZERO {
+                (expense_change / yoy_stats.total_expense * Decimal::from(100)).round_dp(1)
+            } else {
+                Decimal::ZERO
+            };
+            table.add_row(vec![
+                "支出",
+                &format!("¥{}", target_stats.total_expense),
+                &format!("¥{}", yoy_stats.total_expense),
+                &format_change(expense_change),
+                &format_change_pct(expense_change_pct),
+            ]);
+
+            // 净收支对比
+            let target_net = target_stats.total_income - target_stats.total_expense;
+            let yoy_net = yoy_stats.total_income - yoy_stats.total_expense;
+            let net_change = target_net - yoy_net;
+            let net_change_pct = if yoy_net != Decimal::ZERO {
+                (net_change / yoy_net.abs() * Decimal::from(100)).round_dp(1)
+            } else {
+                Decimal::ZERO
+            };
+            table.add_row(vec![
+                "净收支",
+                &format_net(target_net),
+                &format_net(yoy_net),
+                &format_change(net_change),
+                &format_change_pct(net_change_pct),
+            ]);
+
+            // 交易笔数对比
+            let count_change =
+                target_stats.transaction_count as i64 - yoy_stats.transaction_count as i64;
+            let count_change_pct = if yoy_stats.transaction_count > 0 {
+                (Decimal::from(count_change) / Decimal::from(yoy_stats.transaction_count)
+                    * Decimal::from(100))
+                .round_dp(1)
+            } else {
+                Decimal::ZERO
+            };
+            table.add_row(vec![
+                "交易笔数",
+                &target_stats.transaction_count.to_string(),
+                &yoy_stats.transaction_count.to_string(),
+                &format!("{:+}", count_change),
+                &format_change_pct(count_change_pct),
+            ]);
+
+            table.print();
+        }
+    }
+
+    print_empty_line();
     Ok(())
 }
 
