@@ -7,6 +7,24 @@ description: 将用户自然语言交易描述转换为 suanpan CLI 命令。当
 
 Suanpan（算盘）是 Rust 编写的个人财务管理 CLI 工具，使用 SurrealDB 嵌入式数据库存储。
 
+## 安装与依赖
+
+### 依赖
+- Rust 1.82+ (从源码编译时需要)
+
+### 快速安装（推荐）
+```bash
+curl -sSL https://raw.githubusercontent.com/yinguobing/suanpan/main/install.sh | bash
+```
+
+### 从源码编译
+```bash
+git clone https://github.com/yinguobing/suanpan.git
+cd suanpan
+cargo build --release
+sudo cp target/release/suanpan /usr/local/bin/
+```
+
 ## 快速记账流程
 
 1. **提取交易要素**（从用户自然语言中）
@@ -69,9 +87,6 @@ suanpan list --limit 20
 
 # 按日期范围统计
 suanpan stats --from 2026-04-01 --to 2026-04-30
-
-# 月度报表
-suanpan report --month 2026-04
 
 # 趋势分析
 suanpan trend --period month

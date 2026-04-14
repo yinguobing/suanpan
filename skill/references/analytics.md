@@ -9,7 +9,6 @@
 | `suanpan stats` | 统计分析 |
 | `suanpan trend` | 趋势分析 |
 | `suanpan compare` | 对比分析（环比/同比） |
-| `suanpan report` | 生成 HTML 可视化报表 |
 
 ---
 
@@ -119,31 +118,4 @@ suanpan compare --month 2026-01 --compare-type yoy
 
 ---
 
-## suanpan report
 
-生成 HTML 可视化报表。
-
-```bash
-suanpan report [选项]
-```
-
-**参数：**
-
-| 参数 | 说明 |
-|------|------|
-| `--month <YYYY-MM>` | 指定月份 |
-| `--output <路径>` | 输出目录（默认当前目录） |
-| `--charts-only` | 只生成图表（不生成 HTML） |
-
-**示例：**
-
-```bash
-# 生成月度报表
-suanpan report --month 2026-01
-
-# 指定输出目录
-suanpan report --month 2026-01 --output ./reports
-
-# 仅图表
-suanpan report --month 2026-01 --charts-only
-```

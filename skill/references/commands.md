@@ -149,5 +149,5 @@ suanpan update f4sp877fxbwc -c "餐饮/晚餐"
 
 ## 其他参考文档
 
-- **统计分析**（stats/trend/compare/report）：见 [analytics.md](analytics.md)
+- **统计分析**（stats/trend/compare）：见 [analytics.md](analytics.md)
 - **数据管理**（account/category/tag/import）：见 [management.md](management.md)
