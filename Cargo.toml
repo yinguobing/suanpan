@@ -1,6 +1,6 @@
 [package]
 name = "suanpan"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 authors = ["尹国冰"]
 description = "算盘 - 智能体时代的个人财务管理 CLI 工具"
