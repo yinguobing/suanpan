@@ -30,7 +30,7 @@ use update::UpdateArgs;
 
 /// 国冰财务管理系统 CLI
 #[derive(Parser)]
-#[command(name = "finance")]
+#[command(name = "suanpan")]
 #[command(about = "个人财务管理工具")]
 #[command(version)]
 pub struct Cli {
