@@ -105,10 +105,7 @@ async fn list_accounts(db: &Database, output_format: OutputFormat) -> Result<()>
                 let parent = account.parent_id.as_deref().unwrap_or("-");
                 println!(
                     "{}|{}|{}|{}",
-                    account.id,
-                    account.account_type.to_string(),
-                    parent,
-                    account.name
+                    account.id, account.account_type, parent, account.name
                 );
             }
         }

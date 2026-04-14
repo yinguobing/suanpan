@@ -70,7 +70,7 @@ impl OutputTable {
     }
 
     /// 转换为字符串
-    pub fn to_string(&self) -> String {
+    pub fn as_string(&self) -> String {
         match self.format {
             OutputFormat::Machine => self.to_string_machine(),
             OutputFormat::Human => self.to_string_human(),
